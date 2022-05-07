@@ -222,9 +222,13 @@ AstNode funcFParamParser() {
     int cnt = 0;
     if (matchLexicon(34)) {
         getNextLexicon();//'['
-        AstNode tmp = AstNode(Number, "0");
-        tmp.setVal(0);
-        ident.addParam(tmp);
+        if (lexicon.str != "]"){
+            ident.addParam(constExpParser(1));
+        } else {
+            AstNode tmp = AstNode(Number, "0");
+            tmp.setVal(0);
+            ident.addParam(tmp);
+        };
         getNextLexicon();//']'
         cnt++;
         while (matchLexicon(34)) {
@@ -235,6 +239,7 @@ AstNode funcFParamParser() {
         }
     }
     ident.setDim(cnt);
+//    cout << ident.str << ident.params.size() << endl;
     fun.addChild(ident);
     return fun;
 }
@@ -463,6 +468,7 @@ void funcRParamsParser(AstNode *father) {
         getNextLexicon();//','
         father->addParam(expParser());
     }
+//    cout << father->str << father->params.size() << endl;
 }
 
 AstNode mulExpParser() {
@@ -586,6 +592,11 @@ AstNode lOrExpParser() {
     } else {
         return lOr;
     }
+//    if (lOr.children[0].nodeType == LAndExp && lOr.children.size() == 1) {
+//        return lOr.children[0];
+//    } else {
+//        return lOr;
+//    }
 }
 
 AstNode constExpParser(int dim) {
@@ -639,6 +650,9 @@ void AstNode::setNodeType(NodeType type) {
 
 void AstNode::setAllUsed() {
     this->used = true;
+    if (this->children.empty()) {
+        return;
+    }
     for (int i = 0; i < this->children.size(); i++) {
         this->children[i].used = true;
     }

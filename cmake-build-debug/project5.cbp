@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6"/>
+	<Project>
+		<Option title="project5"/>
+		<Option makefile_is_custom="1"/>
+		<Option compiler="gcc"/>
+		<Option virtualFolders="CMake Files\;"/>
+		<Build>
+			<Target title="all">
+				<Option working_dir="H:/3rd-1stsemi/compile/project5/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 all"/>
+					<CompileFile command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="project5">
+				<Option output="H:/3rd-1stsemi/compile/project5/cmake-build-debug/project5.exe" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="H:/3rd-1stsemi/compile/project5/cmake-build-debug"/>
+				<Option object_output="./"/>
+				<Option type="1"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++/x86_64-w64-mingw32"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++/backward"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include-fixed"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/../../../../x86_64-w64-mingw32/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 project5"/>
+					<CompileFile command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="project5/fast">
+				<Option output="H:/3rd-1stsemi/compile/project5/cmake-build-debug/project5.exe" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="H:/3rd-1stsemi/compile/project5/cmake-build-debug"/>
+				<Option object_output="./"/>
+				<Option type="1"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++/x86_64-w64-mingw32"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++/backward"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include-fixed"/>
+					<Add directory="D:/mingw/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/../../../../x86_64-w64-mingw32/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 project5/fast"/>
+					<CompileFile command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="edit_cache">
+				<Option working_dir="H:/3rd-1stsemi/compile/project5/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 edit_cache"/>
+					<CompileFile command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="rebuild_cache">
+				<Option working_dir="H:/3rd-1stsemi/compile/project5/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 rebuild_cache"/>
+					<CompileFile command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="D:/mingw/bin/mingw32-make.exe -f &quot;H:/3rd-1stsemi/compile/project5/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+		</Build>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/VarControl.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/VarControl.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/ast.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/ast.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/error.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/error.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/globalVar.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/grammar.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/grammar.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/lexical.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/lexical.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/main.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/midCode.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/midCode.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/mips.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/mips.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/symbol.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/symbol.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/symbolTree.cpp">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/symbolTree.h">
+			<Option target="project5"/>
+		</Unit>
+		<Unit filename="H:/3rd-1stsemi/compile/project5/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\"/>
+		</Unit>
+	</Project>
+</CodeBlocks_project_file>

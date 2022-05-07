@@ -1,0 +1,61 @@
+// 仅涉及常量声明、变量声明、读语句、写语句、赋值语句，加减乘除模除等运算语句、函数定义及调用语句
+const int b = 10;
+const int c = 3, d = 4, e = b * 5 / b;
+//const int c = 3, d = 4, e = 5;
+
+int a;
+int f, g = d, h = e * c;
+//int f, g = 4, h = 15;
+
+void fun1() {
+    int te = h*e;
+    te = te/h;
+    printf("run fun1:%d\n",te);
+}
+
+void fun2(){
+    printf("run fun2\n");
+    return;
+}
+
+void fun3(int para) {
+    para = getint();
+    const int b = para;
+    printf("%d %d %d\n",para,b,h);
+    printf("+: %d -: %d *: %d /: %d %: %d\n", b+h, b-h, b*h,b/h,b%h);
+    printf("run fun3: %d\n", para+para/h);
+}
+
+int fun4() {
+    printf("fun4:\n");
+	return 10;
+}
+
+int fun5(int para) {
+    int a = para;
+    printf("fun5:%d %d\n",a,para);
+	return para * 10;
+}
+
+int fun6(int opa, int opb, int opc) {
+    int well;
+    printf("%d %d %d\n",opa,opb,opc);
+	return (opa + opb) % opc;
+}
+
+int main(){
+
+    int b = 100;
+    const int g = !b;
+    const int c = +b-!b;
+    printf("b: %d\ng: %d\nc: %d\n", b, g, c);
+
+    printf("+: %d -: %d *: %d /: %d %: %d\n", b+h, b-h, b*h,b/h,b%g);
+    fun1();
+    fun2();
+    fun3(h);
+    int opc = h;
+    printf("fun6: %d\n", fun6(fun4()+fun5(g), fun5(fun5(5)), opc));
+
+    return 0;
+}

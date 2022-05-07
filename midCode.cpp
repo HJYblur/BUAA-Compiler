@@ -1,34 +1,31 @@
 //
 // Created by lemon on 2021/11/11.
 //
-/*
- * 待解决的问题：
- * 1、√√√√√√√√√建立符号表
- * 2、√√√√√√√√√数组的相关操作
- * 3、√√√√√√√√√while里的break&continue
- * 4、√√√√√√√√√函数的返回值
- * 5、cond->&& ||多个连接的情况
- */
+#include <queue>
 #include "iostream"
 #include "midCode.h"
 #include "deque"
 #include "string"
 #include "stack"
 
+#define PRINT 1
+
 using namespace std;
 vector<MidCode> midCodeTable;
-SymbolTable symTable;
-SymbolLayer *currentLayer;
+vector<SymbolItem> symTable;
+int currentLayer = 0;
 int tmpVarCnt = 0;
 int ifLabelCnt = 1;
 int whileLabelCnt = 1;
+int condLabelCnt = 1;
 int printStrCnt = 0;
+bool isSingleCond = false;
+bool countParam = false;
+bool isComplex = false;
 string funcName;
 stack<int> whileStack;
-AstNode retVal = AstNode(Ident, "$v0");
 
 void postOrderTraversal(AstNode node) {
-    symTable.forwardLayer();
     AstNode *root = &node;
     stack<AstNode *> s;
     s.push(root);
@@ -110,7 +107,6 @@ void toMidCode(AstNode *node) {
             returnMid(node);
             break;
         case Exp:
-//            symTable.removeTmpVar();
             expMid(node);
             break;
         case PrintfTK:
@@ -153,13 +149,18 @@ void constDeclMid(AstNode *node) {
         MidCode constMid = MidCode(ConstDeclMid);
         AstNode var = initialMid(&node->children[4]);
         constMid.setOp1(ident.str);
-        constMid.setOp2(to_string(var.val));
         if (var.nodeType != Number) {
+            constMid.setOp2(var.str);
+            constMid.setOpRand(to_string(var.val));
+//            cout << getEnum(var.nodeType)<<" " << constMid.opRand << endl;
             constMid.setResultType(1);
+        } else {
+            constMid.setOp2(to_string(var.val));
+            constSymbol.setValue(var.val);
         }
         pushMidCode(constMid);
         constSymbol.setValue(var.val);
-        currentLayer->addSymbol(constSymbol);
+        addSymbol(constSymbol);
     } else {
         //数组
         SymbolItem arraySymbol = SymbolItem(ArraySymbol, ident);
@@ -169,7 +170,13 @@ void constDeclMid(AstNode *node) {
         int yCnt = 0;
         if (ident.dim > 0) {
             AstNode x = expMid(&ident.params[0]);
+//            if (x.nodeType == Number) {
+            arrMid.dim1 = x.val;
             arrMid.setOp1(to_string(x.val));
+//            } else {
+//                arrMid.dim1 = -1;
+//                arrMid.setOp1(x.str);
+//            }
             arrMid.setOpNum(1);
             arraySymbol.setDim1(x.val);
             arraySymbol.setDim(1);
@@ -177,57 +184,92 @@ void constDeclMid(AstNode *node) {
         }
         if (ident.dim > 1) {
             AstNode y = expMid(&ident.params[1]);
+//            if (y.nodeType == Number) {
+            arrMid.dim2 = y.val;
             arrMid.setOp2(to_string(y.val));
+//            } else {
+//                arrMid.dim2 = -1;
+//                arrMid.setOp2(y.str);
+//            }
             arrMid.setOpNum(2);
             arraySymbol.setDim2(y.val);
             arraySymbol.setDim(2);
             yCnt = y.val;
         }
         pushMidCode(arrMid);
+//        for (int i = 0; i < node->children.size(); i++) {
+//            cout << getEnum(node->children[i].nodeType) << endl;
+//        }
         vector<AstNode> vars = initialMid(&node->children[4]).children;
-        if (ident.dim == 1) {
-            for (int i = 0; i < xCnt; i++) {
-                //数组每个分量的值
-                AstNode content = vars[i];
-//                cout << getEnum(content.nodeType) << content.val<< endl;
-                //符号表添加值
-                SymbolItem var = SymbolItem(ConstSymbol);
-                var.setValue(content.val);
-                arraySymbol.addParam(var);
-                //生成中间代码
-                MidCode setArrayVar = MidCode(ArrayVarMid);
-                setArrayVar.setOpRand(ident.str);//arr[i]=xxx;
-                setArrayVar.setOp1(to_string(i * 4));
-                setArrayVar.setResult(content.str);
+//        cout << vars.size() << endl;
+        if (vars.empty()) {
+            AstNode content = initialMid(&node->children[4]);
+//            cout << getEnum(content.nodeType) << content.val << endl;
+            //符号表添加值
+            SymbolItem var = SymbolItem(ConstSymbol);
+            var.setValue(content.val);
+            arraySymbol.addParam(var);
+            //生成中间代码
+            MidCode setArrayVar = MidCode(ArrayVarMid);
+            setArrayVar.setOpRand(ident.str);//arr[i]=xxx;
+            setArrayVar.setOp1(to_string(0));
+            setArrayVar.setResult(content.str);
+            if (ident.dim == 1) {
                 setArrayVar.setOpNum(1);
-                if (content.nodeType != Number) {
-                    setArrayVar.setResultType(1);
-                }
-                pushMidCode(setArrayVar);
+            } else {
+                setArrayVar.setOpNum(2);
+                setArrayVar.setOp2("0");
             }
+            if (content.nodeType != Number) {
+                setArrayVar.setResultType(1);
+            }
+            pushMidCode(setArrayVar);
         } else {
-            int cnt = 0;
-            for (int i = 0; i < xCnt; i++) {
-                for (int j = 0; j < yCnt; j++) {
-                    AstNode content = vars[cnt++];
-                    //符号表
+            if (ident.dim == 1) {
+//                cout << ident.str << endl;
+                for (int i = 0; i < xCnt; i++) {
+                    //数组每个分量的值
+                    AstNode content = vars[i];
+//                    cout << getEnum(content.nodeType) << content.val << endl;
+                    //符号表添加值
                     SymbolItem var = SymbolItem(ConstSymbol);
                     var.setValue(content.val);
                     arraySymbol.addParam(var);
-                    //中间代码
+                    //生成中间代码
                     MidCode setArrayVar = MidCode(ArrayVarMid);
-                    setArrayVar.setOpRand(ident.str);
+                    setArrayVar.setOpRand(ident.str);//arr[i]=xxx;
                     setArrayVar.setOp1(to_string(i * 4));
-                    setArrayVar.setOp2(to_string(j * 4));
                     setArrayVar.setResult(content.str);
+                    setArrayVar.setOpNum(1);
                     if (content.nodeType != Number) {
                         setArrayVar.setResultType(1);
                     }
                     pushMidCode(setArrayVar);
                 }
+            } else {
+                int cnt = 0;
+                for (int i = 0; i < xCnt; i++) {
+                    for (int j = 0; j < yCnt; j++) {
+                        AstNode content = vars[cnt++];
+                        //符号表
+                        SymbolItem var = SymbolItem(ConstSymbol);
+                        var.setValue(content.val);
+                        arraySymbol.addParam(var);
+                        //中间代码
+                        MidCode setArrayVar = MidCode(ArrayVarMid);
+                        setArrayVar.setOpRand(ident.str);
+                        setArrayVar.setOp1(to_string(i * 4));
+                        setArrayVar.setOp2(to_string(j * 4));
+                        setArrayVar.setResult(content.str);
+                        if (content.nodeType != Number) {
+                            setArrayVar.setResultType(1);
+                        }
+                        pushMidCode(setArrayVar);
+                    }
+                }
             }
         }
-        currentLayer->addSymbol(arraySymbol);
+        addSymbol(arraySymbol);
     }
 }
 
@@ -240,16 +282,21 @@ void varDeclMid(AstNode *node) {
         varMid.setOp1(ident.str);
         if (node->children.size() > 2) {
             AstNode var = initialMid(&node->children[3]);
-            varMid.setOp2(var.str);
-            varSymbol.setValue(var.val);
+//            cout <<ident.str <<getEnum(var.nodeType) <<var.val<< endl;
             if (var.nodeType != Number) {
+                varMid.setOp2(var.str);
+                varMid.setOpRand(to_string(var.val));
                 varMid.setResultType(1);
+                varSymbol.setValue(var.val);
+            } else {
+                varMid.setOp2(to_string(var.val));
+                varSymbol.setValue(var.val);
             }
         } else {
             varMid.setOpNum(1);
         }
         pushMidCode(varMid);
-        currentLayer->addSymbol(varSymbol);
+        addSymbol(varSymbol);
     } else {
         //数组
         SymbolItem arraySymbol = SymbolItem(ArraySymbol, ident);
@@ -259,7 +306,14 @@ void varDeclMid(AstNode *node) {
         int yCnt = 0;
         if (ident.dim > 0) {
             AstNode x = expMid(&ident.params[0]);
+//            if (x.nodeType == Number) {
+            arrMid.dim1 = x.val;
             arrMid.setOp1(to_string(x.val));
+//            cout << arrMid.result << " " << x.val << endl;
+//            } else {
+//                arrMid.dim1 = -1;
+//                arrMid.setOp1(x.str);
+//            }
             arrMid.setOpNum(1);
             arraySymbol.setDim1(x.val);
             arraySymbol.setDim(1);
@@ -267,7 +321,13 @@ void varDeclMid(AstNode *node) {
         }
         if (ident.dim > 1) {
             AstNode y = expMid(&ident.params[1]);
+//            if (y.nodeType == Number) {
+            arrMid.dim2 = y.val;
             arrMid.setOp2(to_string(y.val));
+//            } else {
+//                arrMid.dim2 = -1;
+//                arrMid.setOp2(y.str);
+//            }
             arrMid.setOpNum(2);
             arraySymbol.setDim2(y.val);
             arraySymbol.setDim(2);
@@ -291,53 +351,77 @@ void varDeclMid(AstNode *node) {
                     arraySymbol.addParam(num);
                 }
             }
-            currentLayer->addSymbol(arraySymbol);
+            addSymbol(arraySymbol);
             return;
         }
         vector<AstNode> vars = initialMid(&node->children[3]).children;
-        if (ident.dim == 1) {
-            for (int i = 0; i < xCnt; i++) {
-                //数组每个分量的值
-                AstNode content = vars[i];
+        if (vars.empty()) {
+            AstNode content = initialMid(&node->children[3]);
 //                cout << getEnum(content.nodeType) << content.val<< endl;
-                //符号表添加值
-                SymbolItem var = SymbolItem(ConstSymbol);
-                var.setValue(content.val);
-                arraySymbol.addParam(var);
-                //生成中间代码
-                MidCode setArrayVar = MidCode(ArrayVarMid);
-                setArrayVar.setOpRand(ident.str);//arr[i]=xxx;
-                setArrayVar.setOp1(to_string(i * 4));
-                setArrayVar.setResult(content.str);
+            //符号表添加值
+            SymbolItem var = SymbolItem(ConstSymbol);
+            var.setValue(content.val);
+            arraySymbol.addParam(var);
+            //生成中间代码
+            MidCode setArrayVar = MidCode(ArrayVarMid);
+            setArrayVar.setOpRand(ident.str);//arr[i]=xxx;
+            setArrayVar.setOp1(to_string(0));
+            setArrayVar.setResult(content.str);
+            if (ident.dim == 1) {
                 setArrayVar.setOpNum(1);
-                if (content.nodeType != Number) {
-                    setArrayVar.setResultType(1);
-                }
-                pushMidCode(setArrayVar);
+            } else {
+                setArrayVar.setOpNum(2);
+                setArrayVar.setOp2("0");
             }
+            if (content.nodeType != Number) {
+                setArrayVar.setResultType(1);
+            }
+            pushMidCode(setArrayVar);
         } else {
-            int cnt = 0;
-            for (int i = 0; i < xCnt; i++) {
-                for (int j = 0; j < yCnt; j++) {
-                    AstNode content = vars[cnt++];
-                    //符号表
+            if (ident.dim == 1) {
+                for (int i = 0; i < xCnt; i++) {
+                    //数组每个分量的值
+                    AstNode content = vars[i];
+//                cout << getEnum(content.nodeType) << content.val<< endl;
+                    //符号表添加值
                     SymbolItem var = SymbolItem(ConstSymbol);
                     var.setValue(content.val);
                     arraySymbol.addParam(var);
-                    //中间代码
+                    //生成中间代码
                     MidCode setArrayVar = MidCode(ArrayVarMid);
-                    setArrayVar.setOpRand(ident.str);
+                    setArrayVar.setOpRand(ident.str);//arr[i]=xxx;
                     setArrayVar.setOp1(to_string(i * 4));
-                    setArrayVar.setOp2(to_string(j * 4));
                     setArrayVar.setResult(content.str);
+                    setArrayVar.setOpNum(1);
                     if (content.nodeType != Number) {
                         setArrayVar.setResultType(1);
                     }
                     pushMidCode(setArrayVar);
                 }
+            } else {
+                int cnt = 0;
+                for (int i = 0; i < xCnt; i++) {
+                    for (int j = 0; j < yCnt; j++) {
+                        AstNode content = vars[cnt++];
+                        //符号表
+                        SymbolItem var = SymbolItem(ConstSymbol);
+                        var.setValue(content.val);
+                        arraySymbol.addParam(var);
+                        //中间代码
+                        MidCode setArrayVar = MidCode(ArrayVarMid);
+                        setArrayVar.setOpRand(ident.str);
+                        setArrayVar.setOp1(to_string(i * 4));
+                        setArrayVar.setOp2(to_string(j * 4));
+                        setArrayVar.setResult(content.str);
+                        if (content.nodeType != Number) {
+                            setArrayVar.setResultType(1);
+                        }
+                        pushMidCode(setArrayVar);
+                    }
+                }
             }
         }
-        currentLayer->addSymbol(arraySymbol);
+        addSymbol(arraySymbol);
     }
 }
 
@@ -363,7 +447,9 @@ void funcDefMid(AstNode *node) {
             funcParamMid(&param, &funcSymbol);
         }
     }
-    currentLayer->addSymbol(funcSymbol);
+//    cout << funcSymbol.str << " " << funcSymbol.layer << " " << currentLayer << endl;
+    addSymbol(funcSymbol);
+
     //funcBody
     if (node->children.size() > 2) {
         blockMid(&node->children[2]);
@@ -384,43 +470,69 @@ void funcParamMid(AstNode *node, SymbolItem *item) {
     paraSymbol.isFParam = true;
     if (ident.dim == 0) {
         para.setOpNum(0);
-    } else if (ident.dim == 1) {
+    }
         //数组
-//        if (ident.params[0].str == ""){
-//            para.setOp1("0");
-//
-//        }
+    else if (ident.dim == 1) {
+        countParam = true;
         AstNode x = expItemMid(&ident.params[0]);
-        para.setOp1(x.str);
+        countParam = false;
+        para.setOp1("");
         para.setOpNum(1);
         paraSymbol.setDim1(x.val);
         paraSymbol.setDim(1);
     } else {
+        countParam = true;
         AstNode x = expItemMid(&ident.params[0]);
+//        cout << getEnum(ident.params[1].nodeType) << " " <<ident.params[1].val<< endl;
         AstNode y = expMid(&ident.params[1]);
-        para.setOp1(x.str);
-        para.setOp2(y.str);
+        countParam = false;
+        para.setOp1("");
+        para.setOp2(to_string(y.val));
+        para.dim2 = y.val;
+        if (y.nodeType != Number) {
+            para.resultType = 1;
+        }
         paraSymbol.setDim1(x.val);
         paraSymbol.setDim2(y.val);
         paraSymbol.setDim(2);
     }
     pushMidCode(para);
     paraSymbol.setValue(0);
+    paraSymbol.layer = currentLayer + 1;
     item->addParam(paraSymbol);
-    currentLayer->addSymbol(paraSymbol);
+//    cout << "-------------------------------------"
+//         << item->str << item->params[item->params.size() - 1].str
+//         <<endl;
+    addSymbol(paraSymbol);
 }
 
 void blockMid(AstNode *node) {
     //新建一层符号表
-    symTable.forwardLayer();
+    currentLayer++;
     MidCode begin = MidCode(BlockBegin);
     pushMidCode(begin);
     node->setAllUsed();
     for (int i = 0; i < node->children.size(); i++) {
         toMidCode(&node->children[i]);
     }
+//    cout << "In layer " << currentLayer << endl;
+//    for (int i = 0; i < symTable.size(); i++) {
+//        cout << "Whattttttttt " << symTable[i].str << " with layer:" << symTable[i].layer << endl;
+//    }
     //回退符号表
-    symTable.backLayer();
+    for (auto iter = symTable.begin(); iter != symTable.end();) {
+        if (iter->layer == currentLayer) {
+//            cout << "Now pop1: " << iter->str << " with layer " << iter->layer << endl;
+            iter = symTable.erase(iter);
+        } else {
+            iter++;
+        }
+    }
+//    cout << "In layer " << currentLayer << endl;
+//    for (int i = 0; i < symTable.size(); i++) {
+//        cout << "Nowwwwwww " << symTable[i].str << endl;
+//    }
+    currentLayer--;
     MidCode end = MidCode(BlockEnd);
     pushMidCode(end);
 }
@@ -438,10 +550,16 @@ void assignMid(AstNode *node) {
             pushMidCode(getInt);
         } else if (ident.dim == 1) {
             MidCode getInt = MidCode(GetIntMid);
-            getInt.setResult(getRegisterT());
+            getInt.setResult(getTmpVar());
             getInt.setOp1("GetInt");
             getInt.setOpNum(1);
             pushMidCode(getInt);
+
+            SymbolItem item = SymbolItem(Ident);
+            item.setIsTmp();
+            item.setDim(0);
+            item.setString(getInt.result);
+            addSymbol(item);
 
             MidCode getArr = MidCode(ArrayVarMid);
             AstNode x = expMid(&ident.params[0]);
@@ -449,19 +567,28 @@ void assignMid(AstNode *node) {
             getArr.setResult(getInt.result);
             getArr.setOpRand(ident.str);
             getArr.setOp1(ans.str);
+            if (ans.nodeType != Number) {
+                getArr.dim1 = 1;
+            }
             getArr.setOpNum(1);
             getArr.setResultType(1);
             pushMidCode(getArr);
         } else {
             MidCode getInt = MidCode(GetIntMid);
-            getInt.setResult(getRegisterT());
+            getInt.setResult(getTmpVar());
             getInt.setOp1("GetInt");
             getInt.setOpNum(1);
             pushMidCode(getInt);
 
+            SymbolItem item = SymbolItem(Ident);
+            item.setIsTmp();
+            item.setDim(0);
+            item.setString(getInt.result);
+            addSymbol(item);
+
             int dim2 = 0;
-            if (symTable.checkExistedSymbol(&ident)) {
-                SymbolItem *arr = symTable.getExistedSymbol(&ident);
+            if (checkExistedSymbol(ident.str)) {
+                SymbolItem *arr = getExistedSymbol(ident.str);
                 dim2 = arr->dim2;
             }
             MidCode getArr = MidCode(ArrayVarMid);
@@ -472,22 +599,31 @@ void assignMid(AstNode *node) {
             getArr.setOpRand(ident.str);
             getArr.setOp1(ans.str);
             getArr.setOpNum(1);
+            if (ans.nodeType != Number) {
+                getArr.dim1 = 1;
+            }
             getArr.setResultType(1);
             pushMidCode(getArr);
         }
     }
-        //a = b
+        //ident = exp
     else {
         AstNode ident = node->children[0];
         AstNode expNode = expMid(&node->children[1]);
-        if (!symTable.checkExistedSymbol(&ident)) {
+        bool flag = true;
+        if (!checkExistedSymbol(ident.str)) {
             return;
         }
-        SymbolItem *item = symTable.getExistedSymbol(&ident);
+        SymbolItem *item = getExistedSymbol(ident.str);
+        if (item->isFParam) {
+            flag = false;
+        }
 //        cout << item->str << " " << ident.dim << endl;
         if (ident.dim == 0) {
             //符号表赋值
-            item->setValue(expNode.val);
+            if (flag) {
+                item->setValue(expNode.val);
+            }
             //中间代码
             MidCode exp = MidCode(ExpMid);
             exp.setResult(ident.str);
@@ -498,16 +634,25 @@ void assignMid(AstNode *node) {
             }
             pushMidCode(exp);
         } else if (ident.dim == 1) {
+//            cout <<  "111111111111111111111111111" << endl;
             //赋值
-            int index = getAddress(&ident.params[0]).val;
+            AstNode tmp = getAddress(&ident.params[0]);
+            int index = tmp.val;
 //            cout<<item->params.size()<<endl;
-            item->params[index].setValue(expNode.val);
+//            if (flag) {
+//                item->params[index].setValue(expNode.val);
+//            }
             //中间代码
             MidCode arr = MidCode(ArrayVarMid);
             arr.setOpRand(ident.str);
             arr.setOp1(to_string(index));
             arr.setResult(expNode.str);
             arr.setOpNum(1);
+            if (tmp.nodeType != Number) {
+//                cout << "dim 1 : "<< tmp.str << getEnum(tmp.nodeType) << endl;
+                arr.dim1 = 1;
+                arr.setOp1(tmp.str);
+            }
             if (expNode.nodeType != Number) {
                 arr.setResultType(1);
             }
@@ -519,20 +664,25 @@ void assignMid(AstNode *node) {
 //            cout << "1" <<item->str << endl;
             AstNode ans = getAddress(&x, &y, item->dim2);
 //            cout << "2" <<item->str << endl;
-            item->params[ans.val / 4].setValue(expNode.val);
+//            if (flag) {
+//                item->params[ans.val / 4].setValue(expNode.val);
+//            }
             //中间代码
             MidCode arr = MidCode(ArrayVarMid);
             arr.setOpRand(ident.str);
             arr.setOp1(ans.str);
             arr.setResult(expNode.str);
             arr.setOpNum(1);
+            if (ans.nodeType != Number) {
+//                cout << "dim 2 : "<< ans.str << getEnum(ans.nodeType) << endl;
+                arr.dim1 = 1;
+            }
             if (expNode.nodeType != Number) {
                 arr.setResultType(1);
             }
             pushMidCode(arr);
         }
     }
-    tmpVarCnt = 0;
 }
 
 void ifMid(AstNode *node) {
@@ -549,9 +699,9 @@ void ifMid(AstNode *node) {
     //IfCond
     AstNode ifCond = node->children[0];
     if (hasElse) {
-        condMid(&ifCond.children[0], ifName, elseName, true);
+        condInitMid(&ifCond.children[0], ifName, elseName, true);
     } else {
-        condMid(&ifCond.children[0], ifName, endName, true);
+        condInitMid(&ifCond.children[0], ifName, endName, true);
     }
     //IfBody
     MidCode ifLabel = MidCode(Label, 1);
@@ -578,19 +728,26 @@ void ifMid(AstNode *node) {
 
 void whileMid(AstNode *node) {
     node->setAllUsed();
+    string condName = "while_cond" + to_string(whileLabelCnt);
     string bodyName = "while_body" + to_string(whileLabelCnt);
     string endName = "while_end" + to_string(whileLabelCnt);
     whileStack.push(whileLabelCnt);
     whileLabelCnt++;
     //whileCond
+    MidCode condLabel = MidCode(Label, 1);
+    condLabel.setOp1(condName);
+    pushMidCode(condLabel);
     AstNode cond = node->children[0];
-    condMid(&cond.children[0], bodyName, endName, true);
+    condInitMid(&cond.children[0], bodyName, endName, true);
     //whileBody
     MidCode bodyLabel = MidCode(Label, 1);
     bodyLabel.setOp1(bodyName);
     pushMidCode(bodyLabel);
     AstNode whileBody = node->children[1];
     toMidCode(&whileBody.children[0]);
+    MidCode go = MidCode(Goto, 1);
+    go.setOp1(condName);
+    pushMidCode(go);
     //end
     MidCode endLabel = MidCode(Label, 1);
     endLabel.setOp1(endName);
@@ -611,7 +768,7 @@ void continueMid(AstNode *node) {
     node->setAllUsed();
     MidCode c = MidCode(Goto, 1);
     int cnt = whileStack.top();
-    c.setOp1("while_body" + to_string(cnt));
+    c.setOp1("while_cond" + to_string(cnt));
     pushMidCode(c);
 }
 
@@ -619,6 +776,7 @@ void returnMid(AstNode *node) {
     node->setAllUsed();
     MidCode re = MidCode(Return);
     re.setOp1("return");
+    AstNode retVal = AstNode(Ident, "$v0");
     if (!node->children.empty()) {
         AstNode item = node->children[0].children[0];
         if (item.nodeType == Number) {
@@ -629,8 +787,8 @@ void returnMid(AstNode *node) {
             //exp
             AstNode exp = expItemMid(&item);
             re.setOp2(exp.str);
-            retVal.setVal(exp.val);
             re.setOpNum(2);
+            retVal.setVal(exp.val);
         }
     } else {
         re.setOpNum(0);
@@ -645,22 +803,24 @@ void printfMid(AstNode *node) {
     string t;
     int cnt = 0;
 //    cout << s<< endl;
+    queue<MidCode> returnList;
     for (int i = 0; i < s.size(); i++) {
         if (s[i] == '%' && s[i + 1] == 'd') {
             if (!t.empty()) {
                 MidCode str = MidCode(PrintfMid, 1);
                 str.setOp1(t);
                 str.setOp2(to_string(printStrCnt++));
-                pushMidCode(str);
+                returnList.push(str);
             }
             MidCode ident = MidCode(PrintfMid, 2);
+//            cout << node->params[cnt].str << endl;
             AstNode exp = expItemMid(&node->params[cnt++]);
 //            cout << exp.str << endl;
             ident.setOp2(exp.str);
             if (exp.nodeType != Number) {
                 ident.setResultType(1);
             }
-            pushMidCode(ident);
+            returnList.push(ident);
             t = "";
             i++;
         } else if (s[i] != '"') {
@@ -670,50 +830,103 @@ void printfMid(AstNode *node) {
     MidCode str = MidCode(PrintfMid, 1);
     str.setOp1(t);
     str.setOp2(to_string(printStrCnt++));
-    pushMidCode(str);
+    returnList.push(str);
+    while (!returnList.empty()) {
+        pushMidCode(returnList.front());
+        returnList.pop();
+    }
 }
 
 bool condMid(AstNode *node, const string &ifBody, const string &elseBody, bool flag) {
     node->setAllUsed();
+//    cout << getEnum(node->nodeType) << node->str << endl;
     switch (node->nodeType) {
         case LOrExp:
+            isSingleCond = false;
             return lOrMid(node, ifBody, elseBody);
         case LAndExp:
+            isSingleCond = false;
             return lAndMid(node, ifBody, elseBody);
         case EqExp:
             return eqMid(node, ifBody, elseBody, flag);
         case RelExp:
             return relMid(node, ifBody, elseBody, flag);
         default:
-            return false;
+            return zeroMid(node, ifBody, elseBody, flag);
+    }
+}
+
+bool condInitMid(AstNode *node, const string &ifBody, const string &elseBody, bool flag) {
+    node->setAllUsed();
+    MidCode go = MidCode(Goto);
+    go.setOp1(elseBody);
+//    cout << getEnum(node->nodeType) << node->str << endl;
+    switch (node->nodeType) {
+        case LOrExp:
+            isSingleCond = false;
+            return lOrMid(node, ifBody, elseBody);
+        case LAndExp:
+            isSingleCond = false;
+            return lAndMid(node, ifBody, elseBody);
+        case EqExp:
+            eqMid(node, ifBody, elseBody, flag);
+            pushMidCode(go);
+            return true;
+        case RelExp:
+            relMid(node, ifBody, elseBody, flag);
+            pushMidCode(go);
+            return true;
+        default:
+            zeroMid(node, ifBody, elseBody, flag);
+            pushMidCode(go);
+            return true;
     }
 }
 
 bool lOrMid(AstNode *node, const string &ifBody, const string &elseBody) {
-    //仅支持比较一次
     node->setAllUsed();
-    for (auto &i : node->children) {
-        if (i.nodeType == Or) {
+    string currentElse;
+    for (int i = 0; i < node->children.size(); i++) {
+        AstNode child = node->children[i];
+        if (child.nodeType == Or) {
+            MidCode label = MidCode(Label);
+            label.setOp1(currentElse);
+            pushMidCode(label);
+            condLabelCnt++;
             continue;
-        }
-        if (condMid(node, ifBody, elseBody, true)) {
-            return true;
+        } else {
+            currentElse = "OrLabel" + to_string(condLabelCnt);
+            if (i == node->children.size() - 1) {
+                condMid(&child, ifBody, elseBody, true);
+            } else {
+                condMid(&child, ifBody, currentElse, true);
+            }
         }
     }
     MidCode go = MidCode(Goto, 1);
     go.setOp1(elseBody);
     pushMidCode(go);
-    return false;
+    return true;
 }
 
 bool lAndMid(AstNode *node, const string &ifBody, const string &elseBody) {
     node->setAllUsed();
-    for (auto &i : node->children) {
-        if (i.nodeType == And) {
+    string currentIf;
+    for (int i = 0; i < node->children.size(); i++) {
+        AstNode child = node->children[i];
+        if (child.nodeType == And) {
+            MidCode label = MidCode(Label);
+            label.setOp1(currentIf);
+            pushMidCode(label);
+            condLabelCnt++;
             continue;
-        }
-        if (condMid(&i, ifBody, elseBody, false)) {
-            return true;
+        } else {
+            currentIf = "AndLabel" + to_string(condLabelCnt);
+            if (i == node->children.size() - 1) {
+                condMid(&child, ifBody, elseBody, false);
+            } else {
+                condMid(&child, currentIf, elseBody, false);
+            }
         }
     }
     MidCode go = MidCode(Goto, 1);
@@ -724,128 +937,350 @@ bool lAndMid(AstNode *node, const string &ifBody, const string &elseBody) {
 
 bool eqMid(AstNode *node, const string &ifBody, const string &elseBody, bool flag) {
     node->setAllUsed();
-    vector<AstNode> list = node->children;//a==b/a!=b
-    AstNode right = list[list.size() - 1];
-    list.pop_back();
-    AstNode op = list[list.size() - 1];
-    list.pop_back();
-    AstNode left = list[list.size() - 1];
-    list.pop_back();
+
+    deque<AstNode> list(node->children.begin(), node->children.end());
+
+    while (list.size() > 3) {
+        AstNode left = list.front();
+        if (left.nodeType == RelExp) {
+            left = parseRelMid(&list.front(), ifBody, elseBody, flag);
+        } else {
+            left = expItemMid(&list.front());
+        }
+        list.pop_front();
+        if (left.nodeType == Number) {
+            AstNode tLeft = AstNode(Ident, getTmpVar());
+            tLeft.val = left.val;
+            left = tLeft;
+
+            SymbolItem item = SymbolItem(tLeft);
+            item.setIsTmp();
+            item.setDim(0);
+            addSymbol(item);
+
+            MidCode well = MidCode(ExpMid);
+            well.opNum = 0;
+            well.result = tLeft.str;
+            well.op1 = to_string(left.val);
+            pushMidCode(well);
+        }
+        AstNode op = list.front();
+        list.pop_front();
+        AstNode right = list.front();
+        if (right.nodeType == RelExp) {
+            right = parseRelMid(&list.front(), ifBody, elseBody, flag);
+        } else {
+            right = expItemMid(&list.front());
+        }
+        list.pop_front();
+        AstNode ans = AstNode(Ident, getTmpVar());
+
+        SymbolItem item = SymbolItem(ans);
+        item.setIsTmp();
+        addSymbol(item);
+
+        MidCode compare = MidCode(Compare);
+        compare.setOp1(left.str);
+        compare.setOp2(right.str);
+        compare.setResult(ans.str);
+        if (right.nodeType == Number) {
+            compare.setResultType(0);
+        } else {
+            compare.setResultType(1);
+        }
+
+        if (op.nodeType == EQL) {
+            compare.setOpRand("seq");
+        } else {
+            compare.setOpRand("sne");
+        }
+        pushMidCode(compare);
+
+        list.push_front(ans);
+    }
+
+    AstNode left = list.front();
+    if (left.nodeType == RelExp) {
+        left = parseRelMid(&list.front(), ifBody, elseBody, flag);
+    } else {
+        left = expItemMid(&list.front());
+    }
+    list.pop_front();
+    if (left.nodeType == Number) {
+        AstNode tLeft = AstNode(Ident, getTmpVar());
+        tLeft.val = left.val;
+        left = tLeft;
+
+        SymbolItem item = SymbolItem(tLeft);
+        item.setIsTmp();
+        item.setDim(0);
+        addSymbol(item);
+
+        MidCode well = MidCode(ExpMid);
+        well.opNum = 0;
+        well.result = tLeft.str;
+        well.op1 = to_string(left.val);
+        pushMidCode(well);
+    }
+    AstNode op = list.front();
+    list.pop_front();
+    AstNode right = list.front();
+    if (right.nodeType == RelExp) {
+        right = parseRelMid(&list.front(), ifBody, elseBody, flag);
+    } else {
+        right = expItemMid(&list.front());
+    }
+    list.pop_front();
+
     MidCode cmp = MidCode(Cmp);//cmp a==b
     cmp.setOp1(left.str);
     cmp.setOp2(right.str);
-    bool isTrue;
+    if (right.nodeType == Number) {
+        cmp.setResultType(0);
+    } else {
+        cmp.setResultType(1);
+    }
+
     if (flag) {
         //Or
         if (op.nodeType == EQL) {
-            isTrue = (left.str == right.str);
-            pushMidCode(cmp);
-            MidCode beq = MidCode(Beq, 1);
-            beq.setOp1(ifBody);
-            pushMidCode(beq);
+            cmp.setResult(ifBody);
+            cmp.setOpRand("beq");
         } else {
-            isTrue = (left.str != right.str);
-            pushMidCode(cmp);
-            MidCode bne = MidCode(Bne, 1);
-            bne.setOp1(ifBody);
-            pushMidCode(bne);
+            cmp.setResult(ifBody);
+            cmp.setOpRand("bne");
         }
     } else {
         //And
         if (op.nodeType == EQL) {
-            isTrue = (left.str == right.str);
-            pushMidCode(cmp);
-            MidCode bne = MidCode(Bne, 1);
-            bne.setOp1(elseBody);
-            pushMidCode(bne);
+            cmp.setResult(elseBody);
+            cmp.setOpRand("bne");
         } else {
-            isTrue = (left.str != right.str);
-            pushMidCode(cmp);
-            MidCode beq = MidCode(Beq, 1);
-            beq.setOp1(elseBody);
-            pushMidCode(beq);
+            cmp.setResult(elseBody);
+            cmp.setOpRand("beq");
         }
     }
-    if (isTrue) {
-        return true;
-    } else {
-        return false;
-    }
+    pushMidCode(cmp);
+    return true;
 }
 
 bool relMid(AstNode *node, const string &ifBody, const string &elseBody, bool flag) {
     node->setAllUsed();
-    vector<AstNode> list = node->children;
-    AstNode right = list[list.size() - 1];
-    list.pop_back();
-    AstNode op = list[list.size() - 1];
-    list.pop_back();
-    AstNode left = list[list.size() - 1];
-    list.pop_back();
+
+    deque<AstNode> list(node->children.begin(), node->children.end());
+
+    while (list.size() > 3) {
+        AstNode left = expItemMid(&list.front());
+        list.pop_front();
+        if (left.nodeType == Number) {
+            AstNode tLeft = AstNode(Ident, getTmpVar());
+            tLeft.val = left.val;
+            left = tLeft;
+
+            SymbolItem item = SymbolItem(tLeft);
+            item.setIsTmp();
+            item.setDim(0);
+            addSymbol(item);
+
+            MidCode well = MidCode(ExpMid);
+            well.opNum = 0;
+            well.result = tLeft.str;
+            well.op1 = to_string(left.val);
+            pushMidCode(well);
+        }
+        AstNode op = list.front();
+        list.pop_front();
+        AstNode right = expItemMid(&list.front());
+        list.pop_front();
+
+        AstNode ans = AstNode(Ident, getTmpVar());
+
+        SymbolItem item = SymbolItem(ans);
+        item.setIsTmp();
+        addSymbol(item);
+
+        MidCode compare = MidCode(Compare);
+        compare.setOp1(left.str);
+        compare.setOp2(right.str);
+        compare.setResult(ans.str);
+        if (right.nodeType == Number) {
+            compare.setResultType(0);
+        } else {
+            compare.setResultType(1);
+        }
+
+        if (op.nodeType == GRE) {
+            compare.setOpRand("sgt");
+        } else if (op.nodeType == LSS) {
+            compare.setOpRand("slt");
+        } else if (op.nodeType == GEQ) {
+            compare.setOpRand("sge");
+        } else {
+            compare.setOpRand("sle");
+        }
+        pushMidCode(compare);
+
+        list.push_front(ans);
+    }
+
+    AstNode left = expItemMid(&list.front());
+    list.pop_front();
+    if (left.nodeType == Number) {
+        AstNode tLeft = AstNode(Ident, getTmpVar());
+        tLeft.val = left.val;
+        left = tLeft;
+
+        SymbolItem item = SymbolItem(tLeft);
+        item.setIsTmp();
+        item.setDim(0);
+        addSymbol(item);
+
+        MidCode well = MidCode(ExpMid);
+        well.opNum = 0;
+        well.result = tLeft.str;
+        well.op1 = to_string(left.val);
+        pushMidCode(well);
+    }
+    AstNode op = list.front();
+    list.pop_front();
+    AstNode right = expItemMid(&list.front());
+    list.pop_front();
+
     MidCode cmp = MidCode(Cmp);//cmp a>b a<b a>=b a<=b
     cmp.setOp1(left.str);
     cmp.setOp2(right.str);
-    bool isTrue;
+    if (right.nodeType == Number) {
+        cmp.setResultType(0);
+    } else {
+        cmp.setResultType(1);
+    }
+
     if (flag) {
         //Or
         if (op.nodeType == GRE) {
-            isTrue = (left.str > right.str);
-            pushMidCode(cmp);
-            MidCode bgt = MidCode(Bgt, 1);
-            bgt.setOp1(ifBody);
-            pushMidCode(bgt);
+            cmp.setResult(ifBody);
+            cmp.setOpRand("bgt");
         } else if (op.nodeType == LSS) {
-            isTrue = (left.str < right.str);
-            pushMidCode(cmp);
-            MidCode blt = MidCode(Blt, 1);
-            blt.setOp1(ifBody);
-            pushMidCode(blt);
+            cmp.setResult(ifBody);
+            cmp.setOpRand("blt");
         } else if (op.nodeType == GEQ) {
-            isTrue = (left.str >= right.str);
-            pushMidCode(cmp);
-            MidCode bge = MidCode(Bge, 1);
-            bge.setOp1(ifBody);
-            pushMidCode(bge);
+            cmp.setResult(ifBody);
+            cmp.setOpRand("bge");
         } else {
-            isTrue = (left.str <= right.str);
-            pushMidCode(cmp);
-            MidCode ble = MidCode(Ble, 1);
-            ble.setOp1(ifBody);
-            pushMidCode(ble);
+            cmp.setResult(ifBody);
+            cmp.setOpRand("ble");
         }
     } else {
         //And
         if (op.nodeType == GRE) {
-            isTrue = (left.str > right.str);
-            pushMidCode(cmp);
-            MidCode blt = MidCode(Blt, 1);
-            blt.setOp1(elseBody);
-            pushMidCode(blt);
+            cmp.setResult(elseBody);
+            cmp.setOpRand("ble");
         } else if (op.nodeType == LSS) {
-            isTrue = (left.str < right.str);
-            pushMidCode(cmp);
-            MidCode bgt = MidCode(Bgt, 1);
-            bgt.setOp1(elseBody);
-            pushMidCode(bgt);
+            cmp.setResult(elseBody);
+            cmp.setOpRand("bge");
         } else if (op.nodeType == GEQ) {
-            isTrue = (left.str >= right.str);
-            pushMidCode(cmp);
-            MidCode ble = MidCode(Ble, 1);
-            ble.setOp1(elseBody);
-            pushMidCode(ble);
+            cmp.setResult(elseBody);
+            cmp.setOpRand("blt");
         } else {
-            isTrue = (left.str <= right.str);
-            pushMidCode(cmp);
-            MidCode bge = MidCode(Bge, 1);
-            bge.setOp1(elseBody);
-            pushMidCode(bge);
+            cmp.setResult(elseBody);
+            cmp.setOpRand("bgt");
         }
     }
-    if (isTrue) {
-        return true;
-    } else {
-        return false;
+    pushMidCode(cmp);
+    return true;
+}
+
+AstNode parseRelMid(AstNode *node, const string &ifBody, const string &elseBody, bool flag) {
+    node->setAllUsed();
+
+    deque<AstNode> list(node->children.begin(), node->children.end());
+
+    while (list.size() > 1) {
+        AstNode left = expItemMid(&list.front());
+        list.pop_front();
+        if (left.nodeType == Number) {
+            AstNode tLeft = AstNode(Ident, getTmpVar());
+            tLeft.val = left.val;
+            left = tLeft;
+
+            SymbolItem item = SymbolItem(tLeft);
+            item.setIsTmp();
+            item.setDim(0);
+            addSymbol(item);
+
+            MidCode well = MidCode(ExpMid);
+            well.opNum = 0;
+            well.result = tLeft.str;
+            well.op1 = to_string(left.val);
+            pushMidCode(well);
+        }
+        AstNode op = list.front();
+        list.pop_front();
+        AstNode right = expItemMid(&list.front());
+        list.pop_front();
+
+        AstNode ans = AstNode(Ident, getTmpVar());
+
+        SymbolItem item = SymbolItem(ans);
+        item.setIsTmp();
+        item.setDim(0);
+        addSymbol(item);
+
+        MidCode compare = MidCode(Compare);
+        compare.setOp1(left.str);
+        compare.setOp2(right.str);
+        compare.setResult(ans.str);
+        if (right.nodeType == Number) {
+            compare.setResultType(0);
+        } else {
+            compare.setResultType(1);
+        }
+
+        if (op.nodeType == GRE) {
+            compare.setOpRand("sgt");
+        } else if (op.nodeType == LSS) {
+            compare.setOpRand("slt");
+        } else if (op.nodeType == GEQ) {
+            compare.setOpRand("sge");
+        } else {
+            compare.setOpRand("sle");
+        }
+        pushMidCode(compare);
+
+        list.push_front(ans);
     }
+    return list[0];
+}
+
+bool zeroMid(AstNode *node, const string &ifName, const string &elseName, bool flag) {
+    AstNode ans = expItemMid(node);
+    if (ans.nodeType == Number) {
+        if (ans.val == 0) {
+            MidCode go = MidCode(Goto);
+            go.setOp1(elseName);
+            pushMidCode(go);
+        } else {
+            MidCode go = MidCode(Goto);
+            go.setOp1(ifName);
+            pushMidCode(go);
+        }
+        return true;
+    }
+    MidCode cmp = MidCode(Cmp);
+    cmp.setOp1(ans.str);
+    cmp.setOp2("0");
+    if (flag) {
+        cmp.setOpRand("bne");
+        cmp.setResult(ifName);
+    } else {
+        cmp.setOpRand("beq");
+        cmp.setResult(elseName);
+    }
+    pushMidCode(cmp);
+//    MidCode go = MidCode(Goto);
+//    go.setOp1(elseName);
+//    pushMidCode(go);
+    return true;
 }
 
 AstNode expMid(AstNode *node) {
@@ -876,7 +1311,6 @@ AstNode expItemMid(AstNode *node) {
 
 AstNode addExpMid(AstNode *node) {
     node->setAllUsed();
-//    vector<AstNode> list = node->children;
     deque<AstNode> list(node->children.begin(), node->children.end());
     while (list.size() > 1) {
         AstNode left = expItemMid(&list.front());
@@ -888,10 +1322,51 @@ AstNode addExpMid(AstNode *node) {
         AstNode result;
         if (left.nodeType != Number || right.nodeType != Number) {
             MidCode plus = MidCode(ExpMid);
+            if (left.nodeType == Number) {
+                AstNode tLeft = AstNode(Ident, getTmpVar());
+                tLeft.val = left.val;
+                left = tLeft;
+
+                SymbolItem item = SymbolItem(tLeft);
+                item.setIsTmp();
+                item.setDim(0);
+                addSymbol(item);
+
+                MidCode well = MidCode(ExpMid);
+                well.opNum = 0;
+                well.result = tLeft.str;
+                well.op1 = to_string(left.val);
+                pushMidCode(well);
+                plus.setResultType(0);
+            }
             plus.setOp1(left.str);
+
             plus.setOpRand(op.str);
+
+            if (right.nodeType == Number) {
+                AstNode tRight = AstNode(Ident, getTmpVar());
+                tRight.val = right.val;
+                right = tRight;
+
+                SymbolItem item = SymbolItem(tRight);
+                item.setIsTmp();
+                item.setDim(0);
+                addSymbol(item);
+
+                MidCode well = MidCode(ExpMid);
+                well.opNum = 0;
+                well.result = tRight.str;
+                well.op1 = to_string(right.val);
+                pushMidCode(well);
+                plus.setResultType(1);
+            }
             plus.setOp2(right.str);
-            string resultName = getRegisterT();
+
+            if (left.nodeType != Number && right.nodeType != Number) {
+                plus.setResultType(2);
+            }
+
+            string resultName = getTmpVar();
             result = AstNode(Ident, resultName);
             plus.setResult(resultName);
             pushMidCode(plus);
@@ -905,12 +1380,17 @@ AstNode addExpMid(AstNode *node) {
         }
         if (left.nodeType == Number && right.nodeType == Number) {
             result.str = to_string(result.val);
+        } else {
+            SymbolItem item = SymbolItem(result);
+            item.setIsTmp();
+            item.setDim(0);
+            addSymbol(item);
         }
         list.push_front(result);
 //        cout << result.str << result.val << endl;
     }
 //    SymbolItem item = SymbolItem(VarSymbol, list[0]);
-//    currentLayer->addSymbol(item);
+//     addSymbol(item);
     return list[0];
 }
 
@@ -925,33 +1405,54 @@ AstNode mulExpMid(AstNode *node) {
         list.pop_front();
         AstNode right = expItemMid(&list.front());
         list.pop_front();
+//        cout << left.str << " " << op.str << " " << right.str << endl;
         AstNode result;
         if (left.nodeType != Number || right.nodeType != Number) {
             MidCode mul = MidCode(ExpMid);
             if (left.nodeType == Number) {
-                AstNode tLeft = AstNode(Ident, getRegisterT());
+                AstNode tLeft = AstNode(Ident, getTmpVar());
                 tLeft.val = left.val;
                 left = tLeft;
+
+                SymbolItem item = SymbolItem(tLeft);
+                item.setIsTmp();
+                item.setDim(0);
+                addSymbol(item);
+
                 MidCode well = MidCode(ExpMid);
                 well.opNum = 0;
                 well.result = tLeft.str;
                 well.op1 = to_string(left.val);
                 pushMidCode(well);
+
+                mul.setResultType(0);
             }
             mul.setOp1(left.str);
             mul.setOpRand(op.str);
             if (right.nodeType == Number) {
-                AstNode tRight = AstNode(Ident, getRegisterT());
+                AstNode tRight = AstNode(Ident, getTmpVar());
                 tRight.val = right.val;
                 right = tRight;
+
+                SymbolItem item = SymbolItem(tRight);
+                item.setIsTmp();
+                item.setDim(0);
+                addSymbol(item);
+
                 MidCode well = MidCode(ExpMid);
                 well.opNum = 0;
                 well.result = tRight.str;
                 well.op1 = to_string(right.val);
                 pushMidCode(well);
+                mul.setResultType(1);
             }
             mul.setOp2(right.str);
-            string resultName = getRegisterT();
+
+            if (left.nodeType != Number && right.nodeType != Number) {
+                mul.setResultType(2);
+            }
+
+            string resultName = getTmpVar();
             mul.setResult(resultName);
             pushMidCode(mul);
             result = AstNode(Ident, resultName);
@@ -959,8 +1460,10 @@ AstNode mulExpMid(AstNode *node) {
             result = AstNode(Number);
         }
         if (op.nodeType == Multi) {
+//            cout << left.str<<left.val << " " << right.val<<endl;
             result.setVal(left.val * right.val);
         } else if (op.nodeType == Div) {
+//            cout << left.str<<left.val << " " << right.val<<endl;
             if (right.val != 0) {
                 result.setVal(left.val / right.val);
             } else {
@@ -975,12 +1478,18 @@ AstNode mulExpMid(AstNode *node) {
         }
         if (left.nodeType == Number && right.nodeType == Number) {
             result.str = to_string(result.val);
+        } else {
+            SymbolItem item = SymbolItem(result);
+            item.setIsTmp();
+            item.setDim(0);
+            addSymbol(item);
         }
+//        cout << result.str<<" "<<result.val << endl;
         list.push_front(result);
 //        cout << result.str << result.val << endl;
     }
 //    SymbolItem item = SymbolItem(VarSymbol, list[0]);
-//    currentLayer->addSymbol(item);
+//     addSymbol(item);
     return list[0];
 }
 
@@ -1001,17 +1510,30 @@ AstNode unaryExpMid(AstNode *node) {
             exp.setOpRand(node->str);
             AstNode var = expItemMid(&node->children[0]);
             exp.setOp1(var.str);
-            string resultName = getRegisterT();
+            if (var.nodeType == Number) {
+                exp.setResultType(0);
+            } else {
+                exp.setResultType(1);
+            }
+            string resultName = getTmpVar();
             exp.setResult(resultName);
             pushMidCode(exp);
+
             AstNode ident = AstNode(Ident, resultName);
             if (var.val == 0) {
                 ident.setVal(1);
             } else {
                 ident.setVal(0);
             }
+
+            SymbolItem item = SymbolItem(Ident);
+            item.setIsTmp();
+            item.setString(resultName);
+            item.setValue(ident.val);
+            item.setDim(0);
+            addSymbol(item);
 //            SymbolItem item = SymbolItem(TmpVar, ident);
-//            currentLayer->addSymbol(item);
+//             addSymbol(item);
             return ident;
         }
         case Plus: {
@@ -1019,13 +1541,25 @@ AstNode unaryExpMid(AstNode *node) {
             exp.setOpRand(node->str);
             AstNode var = expItemMid(&node->children[0]);
             exp.setOp1(var.str);
-            string resultName = getRegisterT();
+            if (var.nodeType == Number) {
+                exp.setResultType(0);
+            } else {
+                exp.setResultType(1);
+            }
+            string resultName = getTmpVar();
             exp.setResult(resultName);
             pushMidCode(exp);
             AstNode ident = AstNode(Ident, resultName);
             ident.setVal(var.val);
+
+            SymbolItem item = SymbolItem(Ident);
+            item.setIsTmp();
+            item.setString(resultName);
+            item.setValue(ident.val);
+            item.setDim(0);
+            addSymbol(item);
 //            SymbolItem item = SymbolItem(TmpVar, ident);
-//            currentLayer->addSymbol(item);
+//             addSymbol(item);
             return ident;
         }
         case Minus: {
@@ -1033,74 +1567,129 @@ AstNode unaryExpMid(AstNode *node) {
             exp.setOpRand(node->str);
             AstNode var = expItemMid(&node->children[0]);
             exp.setOp1(var.str);
-            string resultName = getRegisterT();
+            if (var.nodeType == Number) {
+                exp.setResultType(0);
+            } else {
+                exp.setResultType(1);
+            }
+            string resultName = getTmpVar();
             exp.setResult(resultName);
             pushMidCode(exp);
             AstNode ident = AstNode(Ident, resultName);
             ident.setVal(-1 * var.val);
+
+            SymbolItem item = SymbolItem(Ident);
+            item.setIsTmp();
+            item.setString(resultName);
+            item.setValue(ident.val);
+            item.setDim(0);
+            addSymbol(item);
 //            SymbolItem item = SymbolItem(TmpVar, ident);
-//            currentLayer->addSymbol(item);
+//             addSymbol(item);
             return ident;
         }
         case FuncCall: {
             //FuncParam
-            MidCode returnVal = MidCode(PushVar, 1);
-            returnVal.setOp1("$v0");
-            returnVal.setResult(node->str);
-            returnVal.setOpNum(-1);
-            pushMidCode(returnVal);
-
-            MidCode ra = MidCode(PushVar, 1);
-            ra.setOp1("$ra");
-            ra.setResult(node->str);
-            ra.setOpNum(-1);
-            pushMidCode(ra);
-            if (!node->params.empty()) {
+            queue<MidCode> params;
+            SymbolItem *func = getExistedSymbol(node->str);
+//            cout << "Func is :" << node->str << " ,with size: " << func->params.size() << endl;
+            if (!func->params.empty()) {
+//                cout << node->params.size() << " " << func->params.size() << endl;
                 for (int i = 0; i < node->params.size(); i++) {
+                    func = getExistedSymbol(node->str);
+//                    cout << i << func->params[i].str << endl;
                     MidCode push = MidCode(PushVar, 1);
+                    if (func->params[i].dim == 1) {
+                        isComplex = true;
+                    }
                     AstNode var = expMid(&node->params[i]);
-//                    if (var.dim == 0){
-//                        push.setOp1(var.str);
-//                    } else if (var.dim == 1){
-//                        AstNode x = expItemMid(&var.params[0]);
-//                        push.setOp1(var.str+"["+x.str+"]");
-//                    } else {
-//                        AstNode x = expItemMid(&var.params[0]);
-//                        AstNode y = expItemMid(&var.params[1]);
-//                        push.setOp1(var.str+"["+x.str+"]["+y.str+"]");
-//                    }
+                    isComplex = false;
                     push.setOp1(var.str);
                     push.setResult(node->str);
-                    push.setOpNum(i);//对应第几个参数
-                    pushMidCode(push);
+                    push.setOpNum(var.dim);
+                    if (var.nodeType != Number) {
+                        push.resultType = 1;
+                    }
+                    push.paraNumber = i;//对应第几个参数
+                    params.push(push);
                 }
+            }
+            while (!params.empty()) {
+                pushMidCode(params.front());
+                params.pop();
             }
             MidCode call = MidCode(FuncCallMid, 1);
             call.setOp1(node->str);
             call.setOpNum(node->params.size());
             pushMidCode(call);
-            return retVal;
+
+            MidCode ass = MidCode(ExpMid, 0);
+            ass.setResult(getTmpVar());
+            ass.setOp1("$v0");
+            ass.setResultType(1);
+            pushMidCode(ass);
+
+            SymbolItem item = SymbolItem(Ident);
+            item.setIsTmp();
+            item.setString(ass.result);
+            item.setDim(0);
+            addSymbol(item);
+
+            AstNode re = AstNode(Ident, ass.result);
+            return re;
         }
         default:
-            if (symTable.checkExistedSymbol(node)) {
-                SymbolItem *sym = symTable.getExistedSymbol(node);
+            if (checkExistedSymbol(node->str)) {
+                SymbolItem *sym = getExistedSymbol(node->str);
+                bool flag = true;
+                if (sym->isFParam) {
+                    flag = false;
+                }
 //                cout << sym->str << endl;
                 if (node->dim == 0) {
-                    node->setVal(sym->value);
+                    if (flag) {
+//                        cout <<node->str <<  sym->value << endl;
+                        node->setVal(sym->value);
+                    }
                     return *node;
                 } else if (node->dim == 1) {
-                    int index = getAddress(&node->params[0]).val;
+                    AstNode re = getAddress(&node->params[0]);
+                    int index = re.val;
                     MidCode getArr = MidCode(ArrayGetMid);
-                    getArr.result = getRegisterT();
-                    getArr.setOp1(node->str + "[" + to_string(index) + "]");
-                    getArr.setOp2(to_string(index));
-                    getArr.setOpRand(node->str);
-                    getArr.opNum = 1;
+                    getArr.result = getTmpVar();
+                    if (re.nodeType == Number) {
+                        getArr.setOp1(to_string(re.val));
+                        getArr.resultType = 0;
+                    } else {
+                        getArr.setOp1(re.str);
+                        getArr.resultType = 1;
+                    }
+                    getArr.setOpRand(node->str);//#tmp = node[index];
+                    if (isComplex) {
+                        getArr.opNum = 2;
+//                        cout << sym->str << " " << node->str << endl;
+                    } else {
+                        getArr.opNum = 1;
+                    }
                     pushMidCode(getArr);
+
+                    SymbolItem item = SymbolItem(Ident);
+                    item.setIsTmp();
+                    item.setString(getArr.result);
+                    item.setDim(0);
+
+                    sym = getExistedSymbol(node->str);
                     AstNode ans = AstNode(Ident);
-                    ans.setVal(sym->params[index/4].value);
+                    if (flag) {
+                        ans.setVal(sym->params[index / 4].value);
+                    } else {
+                        ans.setVal(0);
+                    }
                     ans.str = getArr.result;
-                    ans.dim = 1;
+                    ans.dim = 0;
+
+                    //TODO
+                    addSymbol(item);
                     return ans;
                 } else {
                     AstNode x = expMid(&node->params[0]);
@@ -1108,25 +1697,43 @@ AstNode unaryExpMid(AstNode *node) {
                     AstNode re = getAddress(&x, &y, sym->dim2);
                     int index = re.val;
                     MidCode getArr = MidCode(ArrayGetMid);
-                    getArr.result = getRegisterT();
-                    getArr.setOp1(node->str + "[" + to_string(index) + "]");
+                    getArr.result = getTmpVar();
                     if (re.nodeType == Number) {
-                        getArr.setOp2(to_string(index));
-                        getArr.setOpNum(1);
+                        getArr.setOp1(to_string(re.val));
+                        getArr.resultType = 0;
                     } else {
-                        getArr.setOp2(re.str);
-                        getArr.setOpNum(2);
+                        getArr.setOp1(re.str);
+                        getArr.resultType = 1;
                     }
-                    getArr.setOpRand(node->str);
+                    getArr.setOpRand(node->str);//#tmp = node[index];
+                    getArr.opNum = 1;
                     pushMidCode(getArr);
+
+                    SymbolItem item = SymbolItem(Ident);
+                    item.setIsTmp();
+                    item.setString(getArr.result);
+                    item.setDim(0);
+
+                    sym = getExistedSymbol(node->str);
+//                    cout << "here 1" <<sym->str << " " << sym->dim<< endl;
                     AstNode ans = AstNode(Ident);
-                    ans.setVal(sym->params[index/4].value);
+                    if (flag) {
+                        if (sym->dim == 0) {
+                            ans.setVal(sym->value);
+                        } else {
+                            ans.setVal(sym->params[index / 4].value);
+                        }
+                    } else {
+                        ans.setVal(0);
+                    }
+//                    cout << "here 2" << endl;
                     ans.str = getArr.result;
-                    ans.dim = 1;
+                    ans.dim = 0;
+                    //TODO
+                    addSymbol(item);
                     return ans;
                 }
             } else {
-                node->setVal(0);
                 return *node;
             }
     }
@@ -1135,6 +1742,7 @@ AstNode unaryExpMid(AstNode *node) {
 AstNode initialMid(AstNode *node) {
     if (node->params.size() == 1) {
         AstNode val = node->params[0].children[0];
+//        cout << getEnum(val.nodeType) << val.str << endl;
         return expItemMid(&val);
     } else {
         for (int i = 0; i < node->params.size(); i++) {
@@ -1187,11 +1795,14 @@ AstNode getAddress(AstNode *x, AstNode *y, int dim2) {
     return expItemMid(&tmp3);
 }
 
-string getRegisterT() {
-    if (tmpVarCnt == 10) {
-        tmpVarCnt = 0;
-    }
-    return "$t" + to_string(tmpVarCnt++);
+//string getTmpVar() {
+//    if (tmpVarCnt == 8) {
+//        tmpVarCnt = 0;
+//    }
+//    return "$t" + to_string(tmpVarCnt++);
+//}
+string getTmpVar() {
+    return "#" + to_string(tmpVarCnt++);
 }
 
 MidCode::MidCode(MidCodeType t) {
@@ -1227,6 +1838,27 @@ void MidCode::setResult(string s) {
     this->result = std::move(s);
 }
 
+bool checkExistedSymbol(const string &name) {
+    for (int i = symTable.size() - 1; i >= 0; i--) {
+        if (symTable[i].str == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+SymbolItem *getExistedSymbol(const string &name) {
+//    cout<< "==================================" << endl;
+    for (int i = symTable.size() - 1; i >= 0; i--) {
+//        cout << symTable[i].str << endl;
+        if (symTable[i].str == name) {
+            return &symTable[i];
+        }
+    }
+    cout << "Sorry, I can't find the sym:" << name << endl;
+    return nullptr;
+}
+
 string MidCode::toString() const {
     switch (type) {
         case ConstDeclMid:
@@ -1250,7 +1882,7 @@ string MidCode::toString() const {
                 return this->opRand + "[" + this->op1 + "] = " + this->result;
             }
         case ArrayGetMid:
-            return this->result + " = " + this->op1;
+            return this->result + " = " + this->opRand + "[" + this->op1 + "]";
         case FuncDefMid:
             if (this->resultType == 0) {
                 return "int " + this->op1 + "()";
@@ -1261,7 +1893,7 @@ string MidCode::toString() const {
             if (this->opNum == 0) {
                 return "para int " + this->opRand;
             } else if (this->opNum == 1) {
-                return "para int " + this->opRand + "[]";
+                return "para int " + this->opRand + "[" + this->op1 + "]";
             } else {
                 return "para int " + this->opRand + "[][" + this->op2 + "]";
             }
@@ -1286,19 +1918,21 @@ string MidCode::toString() const {
         case Goto:
             return "goto " + this->op1;
         case Cmp:
-            return "cmp " + this->op1 + " " + this->op2;
-        case Beq:
-            return "beq " + this->op1;
-        case Bne:
-            return "bne " + this->op1;
-        case Bgt:
-            return "bgt " + this->op1;
-        case Bge:
-            return "bge " + this->op1;
-        case Blt:
-            return "blt " + this->op1;
-        case Ble:
-            return "ble " + this->op1;
+            return this->opRand + " " + this->op1 + "," + this->op2 + "," + this->result;
+        case Compare:
+            return this->opRand + " " + this->result + "," + this->op1 + "," + this->op2;
+//        case Beq:
+//            return "beq " + this->op1;
+//        case Bne:
+//            return "bne " + this->op1;
+//        case Bgt:
+//            return "bgt " + this->op1;
+//        case Bge:
+//            return "bge " + this->op1;
+//        case Blt:
+//            return "blt " + this->op1;
+//        case Ble:
+//            return "ble " + this->op1;
         case Return:
             if (this->opNum == 0) {
                 return "return";
@@ -1311,6 +1945,10 @@ string MidCode::toString() const {
             } else {
                 return "print " + this->op2;
             }
+        case BlockBegin:
+            return "------------------------BlockBegin------------------------";
+        case BlockEnd:
+            return "------------------------BlockEnd------------------------";
     }
     return "";
 }
@@ -1321,8 +1959,13 @@ void MidCode::setOpRand(string s) {
 
 
 void pushMidCode(const MidCode &m) {
+    if (countParam) {
+        return;
+    }
     midCodeTable.emplace_back(m);
-//    cout <<m.toString() << endl;
+    if (PRINT) {
+        cout << m.toString() << endl;
+    }
 }
 
 void printAstNode(AstNode *tmp) {
@@ -1343,6 +1986,11 @@ void printMidCode() {
     for (int i = 0; i < midCodeTable.size(); i++) {
         cout << midCodeTable[i].toString() << endl;
     }
+}
+
+void addSymbol(SymbolItem item) {
+//    cout << "Add symbol: " << item.str <<" in layer: " << item.layer << endl;
+    symTable.emplace_back(item);
 }
 
 string getEnum(NodeType type) {
@@ -1457,6 +2105,8 @@ string getEnum(NodeType type) {
             return "Assign";
         case FuncCall:
             return "FuncCall";
+        case Unknown:
+            return "UnKnown";
         default:
             return "";
     }

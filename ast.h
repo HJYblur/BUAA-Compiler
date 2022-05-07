@@ -24,14 +24,15 @@ enum NodeType {
 
 class AstNode {
 public:
-    NodeType nodeType = Unknown;
-    string str;
-    int val = 0;
-    int dim = 0;
-    bool used = false;
-    vector<AstNode> params;//函数、数组参数
-    vector<AstNode> children;
-    AstNode *father;
+    NodeType nodeType = Unknown;//ast节点类型
+    string str;                 //名称
+    int val = 0;                //值
+    int dim = 0;                //数组维数，可取0,1,2
+    bool used = false;          //判断是否已经用于生成中间代码
+    bool isFuncParam = false;   //判断是否是函数参数
+    vector<AstNode> params;     //函数、数组参数
+    vector<AstNode> children;   //存储子节点
+    AstNode *father;            //存储父节点（好像没用）
 
     AstNode();
 

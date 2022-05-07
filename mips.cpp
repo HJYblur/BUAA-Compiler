@@ -5,16 +5,24 @@
 #include "midCode.h"
 #include "mips.h"
 #include "globalVar.h"
+#include "stack"
+#include "VarControl.h"
+
+#define PRINT 0
 
 using namespace std;
 vector<string> mipsTable;
-int registerS = 0;
-bool isJar = false;
+stack<int> preShift;
+vector<VarControl> varControl;
+int controlPoint = 0;
+int currentShift = 0;
 bool isJr = false;
+bool isMain = false;
 string syscall = "\tsyscall";
 
 int getMips() {
-    ofstream mipsFile(R"(H:\3rd-1stsemi\compile\mips\test.asm)", ios::out); //以文本模式打开out.txt备写
+//    ofstream mipsFile(R"(H:\3rd-1stsemi\compile\mips\test.asm)", ios::out);
+    ofstream mipsFile("mips.txt", ios::out);
     if (!mipsFile) {
         cout << "error opening mips file." << endl;
         return 0;
@@ -32,17 +40,12 @@ int getMips() {
             case VarDeclMid:
                 varGlobalDeclMips(midCode);
                 break;
+            case ArrayDeclMid:
+                arrayGlobalDeclMips(midCode);
+                break;
         }
     }
     int point = i;
-    //array
-    for (int i = 0; i < midCodeTable.size(); i++) {
-        MidCode midCode = midCodeTable[i];
-        if (midCode.type == ArrayDeclMid) {
-//            cout << midCode.result << endl;
-            arrayGlobalDeclMips(&midCode);
-        }
-    }
     //string
     for (int i = 0; i < midCodeTable.size(); i++) {
         MidCode midCode = midCodeTable[i];
@@ -57,6 +60,10 @@ int getMips() {
         MidCode midCode = midCodeTable[i];
         if (midCode.type == ArrayVarMid) {
             arrayVarMips(&midCode);
+        } else if (midCode.type == ExpMid) {
+            expMips(&midCode);
+        } else if (midCode.type == ArrayGetMid) {
+            arrayGetMips(&midCode);
         }
     }
     pushMips("\tj main");
@@ -83,17 +90,22 @@ void toMips(MidCode *midCode) {
         case ArrayVarMid:
             arrayVarMips(midCode);
             break;
+        case ArrayDeclMid:
+            arrayDeclMips(midCode);
+            break;
         case ArrayGetMid:
             arrayGetMips(midCode);
             break;
         case FuncDefMid:
+            isJr = false;
             funcDefMips(midCode);
             break;
         case FuncParamMid:
+//            cout << "param" << endl;
             funcParamMips(midCode);
             break;
         case FuncEndMid:
-            funcEndMips();
+            funcEndMips(midCode);
             break;
         case PushVar:
             pushVarMips(midCode);
@@ -102,9 +114,7 @@ void toMips(MidCode *midCode) {
             funcCallMips(midCode);
             break;
         case MainFuncMid:
-            registerS = 0;
-            pushMips("main:");
-            isJar = false;
+            mainFuncMips();
             break;
         case ExpMid:
             expMips(midCode);
@@ -122,313 +132,397 @@ void toMips(MidCode *midCode) {
             gotoMips(midCode);
             break;
         case Cmp:
+            cmpMips(midCode);
             break;
-        case Beq:
-            break;
-        case Bne:
-            break;
-        case Bgt:
-            break;
-        case Bge:
-            break;
-        case Blt:
-            break;
-        case Ble:
+        case Compare:
+            compareMips(midCode);
             break;
         case Return:
             returnMips(midCode);
             break;
         case BlockBegin:
-            symTable.forwardLayer();
+//            cout <<"blockBegin" << endl;
+            blockBegin();
             break;
         case BlockEnd:
-            symTable.backLayer();
+//            cout <<"blockEnd" << endl;
+            blockEnd();
             break;
     }
 }
 
 void constGlobalDeclMips(MidCode *midCode) {
-    SymbolItem *item = symTable.getExistedSymbol(midCode->op1);
-    item->isGlobal = true;
-    string ans = "\t" + midCode->op1 + ":.word " + midCode->op2;
-    pushMips(ans);
+//    cout << midCode->op1 << endl;
+    VarControl item = VarControl(midCode->op1);
+    item.isGlobal = true;
+    if (midCode->resultType == 0) {
+        string ans = "\t" + midCode->op1 + ":.word " + midCode->op2;
+        pushMips(ans);
+    } else {
+        string ans = "\t" + midCode->op1 + ":.word " + midCode->opRand;
+        pushMips(ans);
+    }
+    controlPush(item);
 }
 
 void constDeclMips(MidCode *midCode) {
-    SymbolItem *item;
-    if (symTable.checkExistedSymbol(midCode->op1)) {
-        item = symTable.getExistedSymbol(midCode->op1);
-    } else {
-        return;
-    }
-    item->setAddress(getRegisterS());
-    string ans;
+    VarControl item = VarControl(midCode->op1);
     if (midCode->resultType == 0) {
-        ans = "\tli " + item->address + "," + midCode->op2;
+        pushMips("\tli $s0," + midCode->op2);
     } else {
-        ans = "\tmove " + item->address + "," + midCode->op2;
+        if (checkVar(midCode->op2)) {
+            VarControl *var = searchVar(midCode->op2);
+            getVar(*var, "$s0");
+        } else {
+            cout << "I can't find symbol " << midCode->op2 << endl;
+        }
     }
-    pushMips(ans);
+    storeVar(&item, "$s0");
+    controlPush(item);
 }
 
 void varGlobalDeclMips(MidCode *midCode) {
-    SymbolItem *item = symTable.getExistedSymbol(midCode->op1);
-    item->isGlobal = true;
+    VarControl item = VarControl(midCode->op1);
+    item.isGlobal = true;
     if (midCode->opNum == 2) {
-        string ans = "\t" + midCode->op1 + ":.word " + midCode->op2;
-        pushMips(ans);
+        if (midCode->resultType == 0) {
+            string ans = "\t" + midCode->op1 + ":.word " + midCode->op2;
+            pushMips(ans);
+        } else {
+            string ans = "\t" + midCode->op1 + ":.word " + midCode->opRand;
+            pushMips(ans);
+        }
     } else {
         string ans = "\t" + midCode->op1 + ":.word " + "0";
         pushMips(ans);
     }
+    controlPush(item);
 }
 
 void varDeclMips(MidCode *midCode) {
-    SymbolItem *item;
-    if (symTable.checkExistedSymbol(midCode->op1)) {
-        item = symTable.getExistedSymbol(midCode->op1);
-    } else {
-        return;
-    }
-    item->setAddress(getRegisterS());
+    VarControl item = VarControl(midCode->op1);
     if (midCode->opNum == 2) {
-        string ans;
+        //有初值
         if (midCode->resultType == 0) {
-            ans = "\tli " + item->address + "," + midCode->op2;
+            pushMips("\tli $s0," + midCode->op2);
         } else {
-            ans = "\tmove " + item->address + "," + midCode->op2;
+            if (checkVar(midCode->op2)) {
+                VarControl *var = searchVar(midCode->op2);
+                getVar(*var, "$s0");
+            } else {
+                cout << "I can't find symbol " << midCode->op2 << endl;
+            }
         }
-        pushMips(ans);
+        storeVar(&item, "$s0");
+    } else {
+        //无初值
+        pushMips("\tli $s0,0");
+        storeVar(&item, "$s0");
     }
+    controlPush(item);
 }
 
 void arrayGlobalDeclMips(MidCode *midCode) {
-    SymbolItem *item;
-    if (symTable.checkAllSymbol(midCode->result)) {
-        item = symTable.getAllSymbol(midCode->result);
-    } else {
-        return;
-    }
-    item->setAddress(midCode->result);
+    VarControl item = VarControl(midCode->result);
+    item.address = midCode->result;
+    item.isGlobal = true;
     int address;
-    if (item->dim == 1) {
+    if (midCode->opNum == 1) {
 //        cout << item->dim1 << endl;
-        address = item->dim1 * 4;
+        address = midCode->dim1 * 4;
+        item.dim1 = midCode->dim1;
+        item.dim = 1;
     } else {
 //        cout << item->dim1 << " " << item->dim2 << endl;
-        address = item->dim1 * item->dim2 * 4;
+        address = midCode->dim1 * midCode->dim2 * 4;
+        item.dim1 = midCode->dim1;
+        item.dim2 = midCode->dim2;
+        item.dim = 2;
     }
+    address += 4;
     string ans = "\t" + midCode->result + ":.space " + to_string(address);
     pushMips(ans);
+    controlPush(item);
+}
+
+void arrayDeclMips(MidCode *midCode) {
+    VarControl item = VarControl(midCode->result);
+    int addr;
+    if (midCode->opNum == 1) {
+        item.dim1 = midCode->dim1;
+        item.dim = 1;
+        addr = item.dim1 * 4;
+    } else {
+        item.dim1 = midCode->dim1;
+        item.dim2 = midCode->dim2;
+        item.dim = 2;
+        addr = item.dim1 * item.dim2 * 4;
+    }
+    currentShift += addr;
+    //存储真实地址
+    pushMips("\tsubu $s0,$sp," + to_string(currentShift));
+    storeVar(&item, "$s0");
+//    cout << item.shift<<" current: "<<currentShift << endl;
+    controlPush(item);
 }
 
 void arrayVarMips(MidCode *midCode) {
-    //$t9计算地址 $t8值
-    SymbolItem *item;
-    if (symTable.checkExistedSymbol(midCode->opRand)) {
-        item = symTable.getExistedSymbol(midCode->opRand);
-    } else {
-        return;
-    }
-    int y = item->dim2;
+    pushMips("#arrayVar: " + midCode->opRand + " :");
+    //$s0计算偏移量 $s1值
+    VarControl *item = searchVar(midCode->opRand);
     string address;
     string val;
+    int t1 = 0;
     if (midCode->opNum == 2) {
-        int t1 = stoi(midCode->op1) * y + stoi(midCode->op2);
-        address = "\tli $t9," + to_string(t1);
+        int y = item->dim2;
+        t1 = stoi(midCode->op1) * y + stoi(midCode->op2);
+        pushMips("\tli $s0," + to_string(t1));
         if (midCode->resultType == 0) {
-            val = "\tli $t8," + midCode->result;
+            pushMips("\tli $s1," + midCode->result);
         } else {
-            val = "\tmove $t8," + midCode->result;
+//            val = "\tmove $s1," + midCode->result;
+//            cout<<"hihiiiiiiiiiiiiiiiiiiii" << endl;
+            VarControl *var = searchVar(midCode->result);
+            getVar(*var, "$s1");
         }
     } else {
-        int t1 = stoi(midCode->op1);
-        address = "\tli $t9," + to_string(t1);
-        if (midCode->resultType == 0) {
-            val = "\tli $t8," + midCode->result;
+//        cout << midCode->opRand << " " << midCode->dim1 << endl;
+        if (midCode->dim1 == 1) {
+            VarControl *var = searchVar(midCode->op1);
+            getVar(*var, "$s0");
         } else {
-            val = "\tmove $t8," + midCode->result;
+            t1 = stoi(midCode->op1);
+//            cout << midCode->opRand << " " << to_string(t1) << endl;
+            pushMips("\tli $s0," + to_string(t1));
+        }
+        if (midCode->resultType == 0) {
+            pushMips("\tli $s1," + midCode->result);
+        } else {
+//            val = "\tmove $s1," + midCode->result;
+            VarControl *addr = searchVar(midCode->result);
+            getVar(*addr, "$s1");
         }
     }
-    string set = "\tsw $t8," + midCode->opRand + "($t9)";
-    pushMips(address);
-    pushMips(val);
-    pushMips(set);
+    pushMips("\taddu $s0,$s0,4");
+    if (item->isGlobal) {
+        pushMips("\tsw $s1," + item->address + "($s0)");
+    } else {
+        //当前元素相对于数组首地址的偏移量+数组真实地址
+        getVar(*item, "$s2");
+        pushMips("\taddu $s0,$s0,$s2");
+        pushMips("\tsw $s1,($s0)");
+//        cout << "item: " << item->shift << ", shift:" << t1
+//             << ", currentShift: " << currentShift << endl;
+    }
 }
 
 void arrayGetMips(MidCode *midCode) {
-    SymbolItem *item;
-    if (symTable.checkExistedSymbol(midCode->opRand)) {
-        item = symTable.getExistedSymbol(midCode->opRand);
-    } else {
-        return;
-    }
+    pushMips("#arrayGet: " + midCode->opRand + " " + midCode->opRand);
+    //$s0偏移,$s1值
+    VarControl *item = searchVar(midCode->result);
+    VarControl *var = searchVar(midCode->opRand);
     if (midCode->opNum == 1) {
-        if (stoi(midCode->op2) == 0) {
-            pushMips("\tlw " + midCode->result + "," + item->str);
+        if (midCode->resultType == 0) {
+            pushMips("\tli $s0," + midCode->op1);
         } else {
-            pushMips("\tli $t9,"+midCode->op2);
-            pushMips("\tlw " + midCode->result + "," + item->str + "($t9)");
+            VarControl *index = searchVar(midCode->op1);
+            getVar(*index, "$s0");
         }
+        pushMips("\taddi $s0,$s0,4");
+        if (var->isGlobal) {
+            pushMips("\tlw $s1," + var->address + "($s0)");
+        } else {
+            getVar(*var, "$s2");
+            pushMips("\taddu $s0,$s2,$s0");
+            pushMips("\tlw $s1,($s0)");
+        }
+        storeVar(item, "$s1");
     } else {
-        pushMips("\tlw " + midCode->result + "," + item->str + "(" + midCode->op2 + ")");
+//        cout << "here we need address!!!!!!!!!!!!!" << endl;
+        if (midCode->resultType == 0) {
+//            cout << midCode->op1 <<" " << var->dim2 <<endl;
+            int shift = stoi(midCode->op1) * var->dim2;
+            pushMips("\tli $s0," + to_string(shift));
+        } else {
+            VarControl *index = searchVar(midCode->op1);
+            getVar(*index, "$s0");
+            pushMips("\tmul $s0,$s0," + to_string(var->dim2));
+        }
+        if (var->isGlobal) {
+            pushMips("\tla $s1," + var->address + "($s0)");
+            pushMips("\tmove $s0,$s1");
+//            item->isGlobal = true;
+        } else {
+            getVar(*var, "$s2");
+            pushMips("\taddu $s0,$s2,$s0");
+        }
+        storeVar(item, "$s0");
     }
-
 }
 
 void funcDefMips(MidCode *midCode) {
+    VarControl func = VarControl(midCode->op1);
+    controlPush(func);
     pushMips(midCode->op1 + ":");
-    registerS = 0;
+    currentShift = 0;
 }
 
 void funcParamMips(MidCode *midCode) {
-    SymbolItem *funcItem = symTable.getExistedSymbol(midCode->result);
-    int n = funcItem->params.size();
-    int address = 28 + (n - midCode->paraNumber) * 4;
-    SymbolItem *item = symTable.getExistedSymbol(midCode->opRand);
-    item->address = getRegisterS();
-    pushMips("\tlw " + item->address + "," + to_string(address) + "($sp)");
+    VarControl param = VarControl(midCode->opRand);
+    param.point = controlPoint + 1;
+    param.isFParam = true;
+    param.dim = midCode->opNum;
+    param.dim2 = midCode->dim2;
+    storeVar(&param);
+    controlPush(param);
+
+    VarControl *func = searchVar(midCode->result);
+    func->shift = currentShift;
+    func->paramList.emplace_back(&param);
+    func->params++;
 }
 
-void funcEndMips() {
+void funcEndMips(MidCode *midCode) {
     if (!isJr) {
 //        cout << "Func_end" <<endl;
-        pushMips("\tjr $ra");
         isJr = true;
     }
+    VarControl *func = searchVar(midCode->op1);
+    func->shift = currentShift;
+    pushMips("\tjr $ra");
 }
 
 void pushVarMips(MidCode *midCode) {
-    cout << midCode->result << " " << midCode->opNum << " " << midCode->op1 << endl;
-    SymbolItem *funcItem = symTable.getExistedSymbol(midCode->result);
-    if (midCode->opNum < 0) {
-        pushSP(midCode->op1);
+    VarControl *func = searchVar(midCode->result);
+    if (midCode->paraNumber < 0) {
         return;
     }
-    if (symTable.checkExistedSymbol(midCode->op1)) {
-        SymbolItem *expItem = &funcItem->params[midCode->opNum];
-        SymbolItem *valItem = symTable.getExistedSymbol(midCode->op1);
-        if (expItem->dim == 0) {
-            expItem->setValue(valItem->value);
-        } else {
-            expItem->setAddress(valItem->address);
-        }
-        pushSP(valItem->address);
+    //形参
+//    string str = funcItem->params[midCode->paraNumber].str;
+//    SymbolItem *expItem = symTable.getExistedParamSymbol(str);
+//    SymbolItem *expItem = &funcItem->params[midCode->paraNumber];
+    if (midCode->resultType == 0) {
+        //Number
+        pushMips("\tli $s0," + midCode->op1);
     } else {
-        pushSP(midCode->op1);
+        //实参
+        VarControl *valItem = searchVar(midCode->op1);
+//        cout << valItem->str << " " << valItem->isGlobal << endl;
+        if (valItem->isGlobal && valItem->dim > 0) {
+            pushMips("\tla $s0," + valItem->address);
+        } else {
+            getVar(*valItem, "$s0");
+        }
     }
+    putVar(currentShift + 4 * (func->params + 1), "$s0");
 }
 
 void funcCallMips(MidCode *midCode) {
-    //push $s0-$s9
-    for (int i = 0; i < 8; i++) {
-        pushSP("$s" + to_string(i));
-    }
+    pushSP(currentShift);
+    //push $ra
+    pushMips("\tsw $ra,0($sp)");
+    pushSP(4);
+
+    preShift.push(currentShift);
+    currentShift = 0;
+
     pushMips("\tjal " + midCode->op1);
-    //pop $s9-$s0
-    for (int i = 7; i >= 0; i--) {
-        popSP("$s" + to_string(i));
-    }
-    popSP("$ra");
-    popSP("$v0");
-    isJar = true;
+
+    //pop $ra
+    popSP(4);
+    pushMips("\tlw $ra,0($sp)");
+
+    currentShift = preShift.top();
+    preShift.pop();
+    popSP(currentShift);
+}
+
+void mainFuncMips() {
+    pushMips("main:");
+    isMain = true;
+    currentShift = 0;
 }
 
 void expMips(MidCode *midCode) {
     if (midCode->opNum == 0) {
-        if (symTable.checkExistedSymbol(midCode->result)) {
-            SymbolItem *item = symTable.getExistedSymbol(midCode->result);
-            string sw;
-            if (item->isGlobal && item->address.empty()) {
-                item->address = getRegisterS();
-                sw = "\tsw " + item->address + "," + midCode->result;
-            }
-            if (midCode->resultType == 0) {
-                pushMips("\tli " + item->address + "," + midCode->op1);
-            } else {
-                pushMips("\tmove " + item->address + "," + midCode->op1);
-            }
-            if (!sw.empty()) {
-                pushMips(sw);
-            }
+        //a=b
+        VarControl *item = searchVar(midCode->result);
+        if (midCode->resultType == 0) {
+            pushMips("\tli $s0," + midCode->op1);
         } else {
-            if (midCode->resultType == 0) {
-                pushMips("\tli " + midCode->result + "," + midCode->op1);
+            if (checkVar(midCode->op1)) {
+                VarControl *var = searchVar(midCode->op1);
+                getVar(*var, "$s0");
             } else {
-                pushMips("\tmove " + midCode->result + "," + midCode->op1);
+                pushMips("\tmove $s0," + midCode->op1);
             }
+        }
+        if (item->isTmpVar) {
+            storeVar(item, "$s0");
+        } else {
+            putVar(*item, "$s0");
         }
     } else if (midCode->opNum == 1) {
+        //a = !b
+        VarControl *item = searchVar(midCode->result);
+        if (midCode->resultType == 0) {
+            pushMips("\tli $s0," + midCode->op1);
+        } else {
+            VarControl *var = searchVar(midCode->op1);
+            getVar(*var, "$s0");
+        }
         string op = midCode->opRand;
         if (op == "!") {
-            /////////////////////////////////////
-            string ans = "\tsub " + midCode->result + ",$0," + midCode->op1;
-            pushMips(ans);
+            pushMips("\tseq $s1,$0,$s0");
         } else if (op == "+") {
-            return;
+            pushMips("\tadd $s1,$0,$s0");
         } else if (op == "-") {
-            string ans = "\tsub " + midCode->result + ",$0," + midCode->op1;
-            pushMips(ans);
+            pushMips("\tsub $s1,$0,$s0");
+        }
+        if (item->isTmpVar) {
+            storeVar(item, "$s1");
         } else {
-            cout << "We get a strange opRand: " + midCode->opRand << endl;
+            putVar(*item, "$s1");
         }
     } else {
+        //a = b + c
         string op = midCode->opRand;
-        string ans;
-        string x;
-        string y;
-        string result;
-        string sw;
-        if (symTable.checkExistedSymbol(midCode->result)) {
-            SymbolItem *item = symTable.getExistedSymbol(midCode->result);
-            if (item->isGlobal && item->address.empty()) {
-                item->address = getRegisterS();
-                sw = "\tsw " + item->address + "," + midCode->result;
-            }
-            result = item->address;
+        VarControl *item = searchVar(midCode->result);
+        if (midCode->resultType == 0) {
+            //left number
+            pushMips("\tli $s0," + midCode->op1);
+            VarControl *right = searchVar(midCode->op2);
+            getVar(*right, "$s1");
+        } else if (midCode->resultType == 1) {
+            //right number
+            VarControl *left = searchVar(midCode->op1);
+            getVar(*left, "$s0");
+            pushMips("\tli $s1," + midCode->op2);
         } else {
-            result = midCode->result;
-        }
-        if (symTable.checkExistedSymbol(midCode->op1)) {
-            SymbolItem *item = symTable.getExistedSymbol(midCode->op1);
-            if (item->isGlobal && item->address.empty()) {
-                item->address = getRegisterS();
-                pushMips("\tlw " + item->address + "," + midCode->op1);
-            }
-            x = item->address;
-        } else {
-            x = midCode->op1;
-        }
-        if (symTable.checkExistedSymbol(midCode->op2)) {
-            SymbolItem *item = symTable.getExistedSymbol(midCode->op2);
-            if (item->isGlobal && item->address.empty()) {
-                item->address = getRegisterS();
-                pushMips("\tlw " + item->address + "," + midCode->op2);
-            }
-            y = item->address;
-        } else {
-            y = midCode->op2;
+            //both exp
+            VarControl *left = searchVar(midCode->op1);
+            getVar(*left, "$s0");
+            VarControl *right = searchVar(midCode->op2);
+            getVar(*right, "$s1");
         }
         if (op == "+") {
-            ans = "\taddu " + result + "," + x + "," + y;
+            pushMips("\taddu $s2,$s0,$s1");
         } else if (op == "-") {
-            ans = "\tsubu " + result + "," + x + "," + y;
+            pushMips("\tsubu $s2,$s0,$s1");
         } else if (op == "*") {
-            string tmp = "\tmult " + x + "," + y;
-            pushMips(tmp);
-            ans = "\tmflo " + result;
+            pushMips("\tmul $s2,$s0,$s1");
         } else {
-            string tmp = "\tdiv " + x + "," + y;
-            pushMips(tmp);
+            pushMips("\tdiv $s0,$s1");
             if (op == "/") {
-                ans = "\tmflo " + result;
+                pushMips("\tmflo $s2");
             } else {
-                ans = "\tmfhi " + result;
-            };
+                pushMips("\tmfhi $s2");
+            }
         }
-        pushMips(ans);
-        if (!sw.empty()) {
-            pushMips(sw);
+        if (item->isTmpVar) {
+            storeVar(item, "$s2");
+        } else {
+            putVar(*item, "$s2");
         }
     }
 }
@@ -439,56 +533,31 @@ void printStrMips(MidCode *midCode) {
 }
 
 void printMips(MidCode *midCode) {
-    string load;
-    string li;
     if (midCode->opNum == 1) {
-        load = "\tla $a0,str" + midCode->op2;
-        li = "\tli $v0,4";
+        pushMips("\tla $a0,str" + midCode->op2);
+        pushMips("\tli $v0,4");
     } else {
         if (midCode->resultType == 0) {
-            load = "\tlw $a0," + midCode->op2;
+            pushMips("\tli $a0," + midCode->op2);
         } else {
-            SymbolItem *item;
-            if (symTable.checkExistedSymbol(midCode->op2)) {
-                item = symTable.getExistedSymbol(midCode->op2);
-                if (item->isGlobal && item->address.empty()) {
-                    item->address = getRegisterS();
-                    pushMips("\tlw " + item->address + "," + midCode->op2);
-                }
-                load = "\tmove $a0," + item->address;
-            } else {
-                load = "\tmove $a0," + midCode->op2;
-            }
+            VarControl *item = searchVar(midCode->op2);
+//          cout <<item->str<<currentLayer->blockNum<<"  "<< item->blockNum << endl;
+            getVar(*item, "$a0");
         }
-        li = "\tli $v0,1";
+        pushMips("\tli $v0,1");
     }
-    pushMips(load);
-    pushMips(li);
     pushMips(syscall);
 }
 
 void getIntMips(MidCode *midCode) {
 //    cout << midCode->op1 << endl;
-    SymbolItem *item;
-    string str;
-    string sw;
-    if (symTable.checkExistedSymbol(midCode->result)) {
-        item = symTable.getExistedSymbol(midCode->result);
-        if (item->isGlobal && item->address.empty()) {
-            item->address = getRegisterS();
-            sw = "\tsw " + item->address + "," + midCode->result;
-        }
-        str = item->address;
-    } else {
-        str = midCode->result;
-    }
-    string get = "\tli $v0,5";
-    pushMips(get);
+    pushMips("\tli $v0,5");
     pushMips(syscall);
-    string move = "\tmove " + str + ",$v0";
-    pushMips(move);
-    if (!sw.empty()) {
-        pushMips(sw);
+    VarControl *item = searchVar(midCode->result);
+    if (item->isTmpVar) {
+        storeVar(item, "$v0");
+    } else {
+        putVar(*item, "$v0");
     }
 }
 
@@ -501,55 +570,52 @@ void gotoMips(MidCode *midCode) {
 }
 
 void cmpMips(MidCode *midCode) {
-
+    VarControl *item1 = searchVar(midCode->op1);
+    getVar(*item1, "$s0");
+    if (midCode->resultType == 0) {
+        pushMips("\tli $s1," + midCode->op2);
+    } else {
+        VarControl *item2 = searchVar(midCode->op2);
+        getVar(*item2, "$s1");
+    }
+    pushMips("\t" + midCode->opRand + " $s0,$s1," + midCode->result);
 }
 
-void beqMips(MidCode *midCode) {
-
-}
-
-void bneMips(MidCode *midCode) {
-
-}
-
-void bgtMips(MidCode *midCode) {
-
-}
-
-void bgeMips(MidCode *midCode) {
-
-}
-
-void bltMips(MidCode *midCode) {
-
-}
-
-void bleMips(MidCode *midCode) {
-
+void compareMips(MidCode *midCode) {
+    VarControl *item1 = searchVar(midCode->op1);
+    getVar(*item1, "$s1");
+    if (midCode->resultType == 0) {
+        pushMips("\tli $s2," + midCode->op2);
+    } else {
+        VarControl *item2 = searchVar(midCode->op2);
+        getVar(*item2, "$s2");
+    }
+    pushMips("\t" + midCode->opRand + " $s0,$s1,$s2");
+    VarControl *item = searchVar(midCode->result);
+    storeVar(item, "$s0");
 }
 
 void returnMips(MidCode *midCode) {
     if (midCode->opNum == 2) {
-        pushMips("\tmove $v0," + midCode->op2);
+        if (checkVar(midCode->op2)) {
+            VarControl *item = searchVar(midCode->op2);
+            getVar(*item, "$v0");
+        } else {
+            pushMips("\tli $v0," + midCode->op2);
+        }
     } else if (midCode->opNum == 1) {
         pushMips("\tli $v0," + midCode->op2);
     }
-    if (isJar) {
+    if (!isMain) {
         pushMips("\tjr $ra");
-        isJr = true;
-        isJar = false;
     }
-}
-
-string getRegisterS() {
-    if (registerS == 8) {
-        registerS = 0;
-    }
-    return "$s" + to_string(registerS++);
+    isJr = true;
 }
 
 void pushMips(const string &s) {
-    cout << s << endl;
+    if (PRINT) {
+        cout << s << endl;
+    }
     mipsTable.emplace_back(s);
 }
 
@@ -559,16 +625,103 @@ void printMips(ofstream &file) {
     }
 }
 
-void pushSP(string s) {
-    pushMips("\tsubi $sp,$sp,4");
-    pushMips("\tsw " + s + ",0($sp)");
+void blockBegin() {
+    controlPoint++;
 }
 
-void popSP(string s) {
-    pushMips("\tlw " + s + ",0($sp)");
-    pushMips("\taddi $sp,$sp,4");
+void blockEnd() {
+    int cnt = 0;
+//    cout << "controlPoint: " << controlPoint << endl;
+    for (int i = varControl.size() - 1; i >= 0; i--) {
+        VarControl var = varControl[i];
+        if (var.point == controlPoint) {
+//        cout << "name: " << var.str << " point: " << var.point << endl;
+            cnt++;
+        }
+    }
+    for (int i = 0; i < cnt; i++) {
+//        cout << "pop " << varControl[varControl.size() - 1].str
+//             << " Now,varControl's size is " << varControl.size()
+//             << endl;
+        varControl.pop_back();
+    }
+    controlPoint--;
 }
 
-void popSP() {
-    pushMips("\taddi $sp,$sp,4");
+void getVar(const VarControl &var, const string &s) {
+    //取值
+//    cout << var->str << var->isGlobal << endl;
+    if (var.isGlobal) {
+        pushMips("\tlw " + s + "," + var.str);//s->$s0
+    } else {
+        pushMips("\tlw " + s + ",-" + to_string(var.shift) + "($sp)");//s->$s0
+    }
+}
+
+void storeVar(VarControl *var, const string &s) {
+    //开辟新空间，并存值
+    pushMips("\tsw " + s + ",-" + to_string(currentShift) + "($sp)");//s->$s0
+    var->shift = currentShift;
+    currentShift += 4;
+//    cout << var->shift << " " << var->str  << endl;
+}
+
+void storeVar(VarControl *var) {
+    //开辟新空间，并存值
+    var->shift = currentShift;
+    currentShift += 4;
+//    cout << var->shift << " " << var->str  << endl;
+}
+
+void putVar(const VarControl &var, const string &s) {
+    //存值
+    if (var.isGlobal) {
+        pushMips("\tsw " + s + "," + var.str);
+    } else {
+//        cout << var.str << " " << var.shift << endl;
+        pushMips("\tsw " + s + ",-" + to_string(var.shift) + "($sp)");//s->$s0
+    }
+}
+
+void putVar(int shift, const string &s) {
+    pushMips("\tsw " + s + ",-" + to_string(shift) + "($sp)");//s->$s0
+    currentShift += 4;
+}
+
+void pushSP(int shift) {
+    pushMips("\tsubi $sp,$sp," + to_string(shift));
+}
+
+void popSP(int shift) {
+    pushMips("\taddi $sp,$sp," + to_string(shift));
+}
+
+void controlPush(VarControl var) {
+    varControl.emplace_back(var);
+//    cout << "push " << var.str << " Now,varControl's size is " << varControl.size() << endl;
+}
+
+bool checkVar(const string &name) {
+    for (int i = varControl.size() - 1; i >= 0; i--) {
+        if (varControl[i].str == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+VarControl *searchVar(const string &name) {
+    if (name[0] == '#' && !checkVar(name)) {
+        VarControl tmp = VarControl(name);
+        tmp.isTmpVar = true;
+        controlPush(tmp);
+    }
+    for (int i = varControl.size() - 1; i >= 0; i--) {
+        if (varControl[i].str == name) {
+//            cout << name << endl;
+            return &varControl[i];
+        }
+    }
+    cout << "Sorry, there's no var " << name << "." << endl;
+    return &varControl[0];
 }

@@ -29,11 +29,12 @@ public:
     int value = 0;              //常量的值
     int dim = 0;                //数组维数/函数参数个数
     int dim1 = 0, dim2 = 0;      //数组两个维数的值
+    int layer = 0;
     vector<SymbolItem> params;  //函数/数组参数
 
     bool isFParam = false;
     bool isGlobal = false;
-    string address;
+    bool isTmpVar = false;
 
     void setSymbolType(symbolItemType t);
 
@@ -47,52 +48,9 @@ public:
 
     void setDim2(int dim);
 
-    void setAddress(string add);
+    void addParam(SymbolItem &para);
 
-    void addParam(SymbolItem para);
+    void setIsTmp();
 };
-
-class SymbolLayer {
-public:
-    int index = 0;
-    vector<SymbolItem> symbolLayer;
-
-    SymbolLayer();
-
-    void addSymbol(const SymbolItem &item);
-
-    void print();
-};
-
-class SymbolTable {
-public:
-    int currentIndex = -1;
-    int globalIndex = 0;
-    vector<SymbolLayer> symbolTable;
-
-    void newSymbolLayer();
-
-    void forwardLayer();
-
-    void backLayer();
-
-    void print();
-
-    bool checkExistedSymbol(AstNode *node);
-
-    bool checkExistedSymbol(const string& s);
-
-    SymbolItem *getExistedSymbol(AstNode *node);
-
-    SymbolItem *getExistedSymbol(const string& s);
-
-    void removeTmpVar();
-
-    SymbolItem *getAllSymbol(const string &s);
-
-    bool checkAllSymbol(const string &s);
-};
-
-bool matchType(SymbolItem *item, AstNode *node);
 
 #endif //PROJECT5_SYMBOLTREE_H

@@ -21,10 +21,11 @@ extern vector<Content> storage;
 extern vector<Content> storagePlus;
 extern vector<Error> errorList;
 extern int globalIndex;
+extern int controlPoint;
 extern vector<Symbol> symbolTable;
 extern vector<MidCode> midCodeTable;
-extern SymbolTable symTable;
-extern SymbolLayer* currentLayer;
+extern vector<SymbolItem> symTable;
+extern int currentLayer;
 extern vector<string> mipsTable;
 
 #endif //PROJECT5_GLOBALVAR_H

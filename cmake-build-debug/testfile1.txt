@@ -1,0 +1,48 @@
+const int p = 1;
+const int eri[2] = {543,564},sda[2][2] ={342,54,5,7},fg = 543;
+
+int hhyiv = 20;
+int hh[10],lalal[3][3],dsau = 10,well[3][2]={23,43,63,43,65,22};
+
+int fun_add(int a, int b) {
+    return a + b;
+}
+
+int fun_sub(int a, int b) {
+    return a - b;
+}
+
+void fun1() {
+    printf("D wins.\n");
+    return;
+}
+
+int main() {
+    const int length = 5;
+    const int array_const[5] = {1, 2, 3, 4, 5};
+    int array[5] = {23,34,654,61,2};
+    int array23123[5];
+    int a, b;
+    a = sda[0][1];
+    printf("input base number a:%d\n",a);
+    b = well[2][0];
+    printf("input base number b(not 0!):%d\n",b);
+    int ans = fun_add(sda[0][1],eri[1]);
+    printf("ans:%d\n",ans);
+	printf("The element values of array are:%d,%d,%d,%d,%d;\n",array[0],array[1],array[2],array[3],array[4]);
+    array[0] = a + b;
+    array[1] = a - b;
+    array[2] = a * b;
+    array[3] = a / b;
+    array[4] = a % b;
+	lalal[0][1] = eri[0]*7-2%2;
+	lalal[1][1] = 21/(2+1)*7/(8-3);
+	lalal[2][1] = 28/4+(3+4)%2;
+	hh[0] = 4*lalal[p][1]-2%2;
+	int c = lalal[1][1]+sda[0][0];
+	int d = hh[0]*2;
+	printf("The element values of array are:%d,%d,%d,%d,%d;\n",array[0],array[1],array[2],array[3],array[4]);
+    printf("The element values of lalala are:%d,%d,%d;\n",lalal[0][1],lalal[1][1],lalal[2][1]);
+    printf("c is %d,d is %d\n",c,d);
+    return 0;
+}

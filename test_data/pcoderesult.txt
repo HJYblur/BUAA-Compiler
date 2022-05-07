@@ -1,0 +1,7 @@
+b: 100
+g: 200
+c: 300
+run fun1
+run fun2
+run fun3: 15
+fun6: 2

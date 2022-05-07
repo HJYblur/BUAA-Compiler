@@ -15,12 +15,14 @@ void postOrderTraversal(AstNode root);
 
 string getEnum(NodeType type);
 
+void addSymbol(SymbolItem item);
+
 void printAstNode(AstNode *tmp);
 
 enum MidCodeType {
     ConstDeclMid, VarDeclMid, ArrayDeclMid, ArrayVarMid, ArrayGetMid,
     FuncDefMid, FuncParamMid, PushVar, FuncCallMid, FuncEndMid, MainFuncMid, BlockBegin, BlockEnd,
-    ExpMid, PrintfMid, GetIntMid, Label, Goto, Cmp, Beq, Bne, Bgt, Bge, Blt, Ble, Return
+    ExpMid, PrintfMid, GetIntMid, Label, Goto, Cmp, Return, Compare,
 };
 
 class MidCode {
@@ -33,6 +35,9 @@ public:
     string result;
     int paraNumber = 0;
     int resultType = 0;//0:number 1:exp
+    //0:left number 1:right number 2:both exp
+
+    int dim1 = 0, dim2 = 0;
 
     explicit MidCode(MidCodeType t);
 
@@ -86,6 +91,8 @@ void printfMid(AstNode *node);
 
 bool condMid(AstNode *node, const string &ifName, const string &elseName, bool flag);
 
+bool condInitMid(AstNode *node, const string &ifName, const string &elseName, bool flag);
+
 bool lOrMid(AstNode *node, const string &ifBody, const string &elseBody);
 
 bool lAndMid(AstNode *node, const string &ifName, const string &elseName);
@@ -93,6 +100,10 @@ bool lAndMid(AstNode *node, const string &ifName, const string &elseName);
 bool eqMid(AstNode *node, const string &ifName, const string &elseName, bool flag);
 
 bool relMid(AstNode *node, const string &ifName, const string &elseName, bool flag);
+
+AstNode parseRelMid(AstNode *node, const string &ifName, const string &elseName, bool flag);
+
+bool zeroMid(AstNode *node, const string &ifName, const string &elseName, bool flag);
 
 AstNode expMid(AstNode *node);
 
@@ -112,6 +123,10 @@ AstNode getAddress(AstNode *x);
 
 AstNode getAddress(AstNode *x, AstNode *y, int dim2);
 
-string getRegisterT();
+string getTmpVar();
+
+bool checkExistedSymbol(const string &name);
+
+SymbolItem *getExistedSymbol(const string &name);
 
 #endif //PROJECT5_MIDCODE_H
